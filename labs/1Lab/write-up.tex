@@ -115,54 +115,56 @@ MOSS then compares the resulting structures with other code bases
    that are also interpreted in this way.
 Ultimately, this allows MOSS to find code which does the same thing
    and does it the same exact or similar way.
+\newpage
 \subsection{Exercise 3.1 Token Sequence}
-<id, main>
-<open_call> % should these just be open paren %
-<close_call>
-<open_block>
+\textless id, main\textgreater
+\textless close\_paren\textgreater
+\textless open\_block\textgreater\\
 
-<type, float>
-<id, bal>
-<end_statement>
+\textless type, float\textgreater
+\textless id, bal\textgreater
+\textless end\_statement\textgreater\\
 
-<type, int>
-<id, month>
-<assignment>
-<literal_int, 0>
-<end_statement>
+\textless type, int\textgreater
+\textless id, month\textgreater
+\textless assignment\textgreater
+\textless literal\_int, 0\textgreater
+\textless end\_statement\textgreater\\
 
-<id, bal>
-<assignment>
-<literal_int, 15000>
-<end_statement>
+\textless id, bal\textgreater
+\textless assignment\textgreater
+\textless literal\_int, 15000\textgreater
+\textless end\_statement\textgreater\\
 
-<while>
-<open_operation>
-<id, bal>
-<greater_than>
-<literal_int, 0>
-<close_operation>
-<open_block>
+\textless while\textgreater
+\textless open\_paren\textgreater
+\textless id, bal\textgreater
+\textless greater\_than\textgreater
+\textless literal\_int, 0\textgreater
+\textless open\_paren\textgreater
+\textless open\_block\textgreater\\
 
-<id printf>
-<open_call>
-<literal_str, Month: \%2d Balance: \%10.2f\\n>
-<separator>
-<id, month>
-<separator>
-<id, bal>
-<close_call>
+\textless id printf\textgreater
+\textless open\_paren\textgreater
+\textless literal\_str, Month: \%2d Balance: \%10.2f\\n\textgreater
+\textless separator\textgreater
+\textless id, month\textgreater
+\textless separator\textgreater
+\textless id, bal\textgreater
+\textless close\_paren\textgreater\\
 
-<id, month>
-<assignment>
-<id, month>
-<add_operator>
-<literal_int, 1>
-<end_statement>
+\textless id, month\textgreater
+\textless assignment\textgreater
+\textless id, month\textgreater
+\textless add\_operator\textgreater
+\textless literal\_int, 1\textgreater
+\textless end\_statement\textgreater\\
 
-<close_block>
-<close_block> \\
+\textless close\_block\textgreater
+\textless close\_block\textgreater\\
 The tokens that carry extra information are identifiers (id) and all literals.
+Added information for observibility such as line and columns numbers for each
+   token would also be important for a lexer to provide for future compiler steps.
 
 \section{Dragon}
 \subsection{Exercise 1.1.4 C Target Language}
@@ -170,23 +172,24 @@ The benefit of translating a language to C is that it is a well-established
    language with many existing compilers for a wide range of operating systems.
 This means that only the frontend of a compiler would need to be built out because
    the existing C compilers can translate it to every supported OS.
+\newpage
 \subsection{Exercise 1.6.1 Variables in Block Code}
 \begin{lstlisting}[language=C]
 int w, x, y, z;
 int i = 4; int j = 5;
 {   int j = 7;
-i = 6;
-w = i + j;
+    i = 6;
+    w = i + j;
 }
 x = i + j;
 {   int i = 8;
-y = i + j;
+    y = i + j;
 }
 z = i + j;
 \end{lstlisting}
-w is assigned i + j which is 6 + 7, so w = 13.//
-x is assigned i + j which is 6 + 5, so w = 11.//
-y is assigned i + j which is 8 + 5, so w = 13.//
-z is assigned i + j which is 6 + 5, so w = 11.//
+w is assigned i + j which is 6 + 7, so w = 13.\\
+x is assigned i + j which is 6 + 5, so w = 11.\\
+y is assigned i + j which is 8 + 5, so w = 13.\\
+z is assigned i + j which is 6 + 5, so w = 11.\\
 \end{document}
 
