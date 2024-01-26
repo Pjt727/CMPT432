@@ -3,6 +3,8 @@
 # So you dont need to pull my textbooks each time if you're
 #   cloning from scratch 
 textbooks/
+# my pictures for latex
+assets/
 
 
 #### A bunch of possible latex junk I dont want
