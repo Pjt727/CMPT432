@@ -40,7 +40,7 @@
 \definecolor{codegreen}{rgb}{0,0.6,0}
 \definecolor{codegray}{rgb}{0.5,0.5,0.5}
 \definecolor{codepurple}{rgb}{0.58,0,0.82}
-\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\definecolor{backcolour}{rgb}{0.95,0.5,0.2}
 
 \lstdefinestyle{mystyle}{
     backgroundcolor=\color{backcolour},   
@@ -81,7 +81,7 @@
    \normalfont \normalsize 
    \textsc{CMPT 308 - Spring 2024 - Dr. Labouseur} \\[10pt] % Header stuff.
    \horrule{0.5pt} \\[0.25cm] 	% Top horizontal rule
-   \huge Lab 1 -- ~ Lexer\\     	    % Assignment title
+   \huge Lab 1 -- ~Lexer \\     	    % Assignment title
    \horrule{0.5pt} \\[0.25cm] 	% Bottom horizontal rule
 }
 
@@ -99,94 +99,14 @@
 
 % - -- -  - -- -  - -- -  -
 \section{Crafting A Compiler}
-\subsection{Exercise 1.11 MOSS}
-MOSS, measure of software similarity, interrupts code for its
-   semantic meaning rather than its raw contents.
-A neive approach to detect software similarity would be to
-   to compare lines matching similar strings of text.
-This is very similar to how turnitin and text plagiarism
-   checkers works.
-In the programming realm, avoiding similarity detection from that
-   method would be simple: change variable names and code organization.
-MOSS, however, works to interrupt the code and extract its meaning.
-It achieves this with tokenization, creating an abstract syntax tree
-   (AST), and semantic analysis.
-MOSS then compares the resulting structures with other code bases
-   that are also interpreted in this way.
-Ultimately, this allows MOSS to find code which does the same thing
-   and does it the same exact or similar way.
-\subsection{Exercise 3.1 Token Sequence}
-<id, main>
-<open_call> % should these just be open paren %
-<close_call>
-<open_block>
-
-<type, float>
-<id, bal>
-<end_statement>
-
-<type, int>
-<id, month>
-<assignment>
-<literal_int, 0>
-<end_statement>
-
-<id, bal>
-<assignment>
-<literal_int, 15000>
-<end_statement>
-
-<while>
-<open_operation>
-<id, bal>
-<greater_than>
-<literal_int, 0>
-<close_operation>
-<open_block>
-
-<id printf>
-<open_call>
-<literal_str, Month: \%2d Balance: \%10.2f\\n>
-<separator>
-<id, month>
-<separator>
-<id, bal>
-<close_call>
-
-<id, month>
-<assignment>
-<id, month>
-<add_operator>
-<literal_int, 1>
-<end_statement>
-
-<close_block>
-<close_block> \\
-The tokens that carry extra information are identifiers (id) and all literals.
-
+\subsection{3.3 Regular Expressions}
+(ab*a)|(ba*b)\\
+(a)(bcd|cd)*\\
+(\epsilon)|(ab*c)\\
+\subsection{Exercise 3.1 DFAs}
+TODO
 \section{Dragon}
-\subsection{Exercise 1.1.4 C Target Language}
-The benefit of translating a language to C is that it is a well-established
-   language with many existing compilers for a wide range of operating systems.
-This means that only the frontend of a compiler would need to be built out because
-   the existing C compilers can translate it to every supported OS.
-\subsection{Exercise 1.6.1 Variables in Block Code}
-\begin{lstlisting}[language=C]
-int w, x, y, z;
-int i = 4; int j = 5;
-{   int j = 7;
-i = 6;
-w = i + j;
-}
-x = i + j;
-{   int i = 8;
-y = i + j;
-}
-z = i + j;
-\end{lstlisting}
-w is assigned i + j which is 6 + 7, so w = 13.//
-x is assigned i + j which is 6 + 5, so w = 11.//
-y is assigned i + j which is 8 + 5, so w = 13.//
-z is assigned i + j which is 6 + 5, so w = 11.//
+\subsection{3.3.4 Case Insensitivity In Regular Expression}
+(s|S)(e|E)(l|L)(e|E)(c|C)(t|T)
 \end{document}
 
