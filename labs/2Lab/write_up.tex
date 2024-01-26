@@ -81,7 +81,7 @@
    \normalfont \normalsize 
    \textsc{CMPT 308 - Spring 2024 - Dr. Labouseur} \\[10pt] % Header stuff.
    \horrule{0.5pt} \\[0.25cm] 	% Top horizontal rule
-   \huge Lab 1 -- ~Lexer \\     	    % Assignment title
+   \huge Lab 2 -- ~Lexer \\     	    % Assignment title
    \horrule{0.5pt} \\[0.25cm] 	% Bottom horizontal rule
 }
 
@@ -100,11 +100,27 @@
 % - -- -  - -- -  - -- -  -
 \section{Crafting A Compiler}
 \subsection{3.3 Regular Expressions}
-(ab*a)|(ba*b)\\
-(a)(bcd|cd)*\\
-(\epsilon)|(ab*c)\\
+\begin{verbatim}
+(ab*a)|(ba*b) 
+\end{verbatim}
+\begin{verbatim}
+(a)(bcda|cda)*
+\end{verbatim}
+$(\epsilon)|$\verb|(ab*c)|
 \subsection{Exercise 3.1 DFAs}
-TODO
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{../assets/dfa-a.png}
+    \caption{Problem A)}
+  \label{fig:dfa-a}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{../assets/dfa-b.png}
+    \caption{Problem B)}
+  \label{fig:dfa-b}
+\end{figure}
 \section{Dragon}
 \subsection{3.3.4 Case Insensitivity In Regular Expression}
 (s|S)(e|E)(l|L)(e|E)(c|C)(t|T)
