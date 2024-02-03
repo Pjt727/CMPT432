@@ -7,6 +7,7 @@
 use regex::Regex;
 use std::{
     fs::File,
+    i32,
     io::{BufRead, BufReader},
     path::Path,
 };
@@ -46,64 +47,102 @@ struct Char {
     letter: char,
 }
 
+struct Error {
+    character: char,
+}
+
 enum TokenKind {
     Keyword(Keyword),
     Id(Id),
     Symbol(Symbol),
     Digit(Digit),
     Char(Char),
+    Error(Error),
 }
 
 struct Token {
     kind: TokenKind,
+    start_position: i32,
+    end_position: i32,
 }
 
 // non char, id, and number range are single char that can use regex to
 // or other range techniques to discover
 // It also seems pointless to use regex here
-fn get_non_range_token(buffer: &str) -> Option<Token> {
+// Not sure what optimizations rust does during compilation
+//    but more match checks could only do ones of the correct
+//    str length
+fn get_non_range_token(buffer: &str, start_position: i32, end_position: i32) -> Option<Token> {
     match buffer {
         "boolean" => Some(Token {
             kind: TokenKind::Keyword(Keyword::Boolean),
+            start_position,
+            end_position,
         }),
         "while" => Some(Token {
             kind: TokenKind::Keyword(Keyword::LoopOnTrue),
+            start_position,
+            end_position,
         }),
         "print" => Some(Token {
             kind: TokenKind::Keyword(Keyword::Print),
+            start_position,
+            end_position,
         }),
         "false" => Some(Token {
             kind: TokenKind::Keyword(Keyword::False),
+            start_position,
+            end_position,
         }),
         "true" => Some(Token {
             kind: TokenKind::Keyword(Keyword::True),
+            start_position,
+            end_position,
         }),
         "int" => Some(Token {
             kind: TokenKind::Keyword(Keyword::Int),
+            start_position,
+            end_position,
         }),
         "if" => Some(Token {
             kind: TokenKind::Keyword(Keyword::If),
+            start_position,
+            end_position,
         }),
         "==" => Some(Token {
             kind: TokenKind::Symbol(Symbol::CheckEqaulity),
+            start_position,
+            end_position,
         }),
         "!=" => Some(Token {
             kind: TokenKind::Symbol(Symbol::CheckIneqaulity),
+            start_position,
+            end_position,
         }),
         "=" => Some(Token {
             kind: TokenKind::Symbol(Symbol::Assignment),
+            start_position,
+            end_position,
         }),
         "(" => Some(Token {
             kind: TokenKind::Symbol(Symbol::OpenParenthesis),
+            start_position,
+            end_position,
         }),
         ")" => Some(Token {
             kind: TokenKind::Symbol(Symbol::CloseParenthesis),
+            start_position,
+            end_position,
         }),
         "{" => Some(Token {
             kind: TokenKind::Symbol(Symbol::OpenBlock),
+            start_position,
+            end_position,
         }),
         "}" => Some(Token {
             kind: TokenKind::Symbol(Symbol::CloseBlock),
+            start_position,
+            end_position,
         }),
         _ => None,
     }
@@ -111,7 +150,7 @@ fn get_non_range_token(buffer: &str) -> Option<Token> {
 
 struct TokenStream {
     token: Token,
-    next_token: Box<Option<TokenStream>>,
+    next_token: Box<Option<&TokenStream>>,
 }
 
 /* recursively exhausts the string buffer
@@ -147,7 +186,63 @@ struct TokenStream {
 // !{ is not a token
 // ! is not a valid token reporting and skipping (no recursive call)
 */
-fn fold(buffer: &mut String, start_position: i32, token_stream: &TokenStream) {}
+fn fold(
+    buffer: &mut String,
+    start_position: i32,
+    mut token_stream: TokenStream,
+    is_recursive_call: bool,
+) -> TokenStream {
+    let mut longest_token: Option<Token> = None;
+    let mut longest_token_length;
+    for i in 1..buffer.len() {
+        let end_position = start_position + i as i32;
+        match get_non_range_token(&buffer[0..i], start_position, end_position) {
+            Some(token) => {
+                longest_token = Some(token);
+                longest_token_length = i;
+            }
+            None => {}
+        }
+    }
+    match longest_token {
+        Some(token) => {
+            let new_token_stream = TokenStream {
+                token,
+                next_token: Box::new(None),
+            };
+            token_stream.next_token = Box::new(Some(&new_token_stream));
+            let buffer_end_pos = (token.end_position - token.start_position) as usize;
+            *buffer = buffer[buffer_end_pos..buffer.len()].to_string();
+            return fold(buffer, token.end_position, new_token_stream, true);
+        }
+        None => {
+            if !is_recursive_call {
+                // Because of the nature of the langauge
+                //    lex error tokens can only be a single char.
+                let new_err_token;
+                if let Some(first_char) = buffer.chars().next() {
+                    new_err_token = Token {
+                        kind: TokenKind::Error(Error {
+                            character: first_char,
+                        }),
+                        start_position,
+                        end_position: start_position + 1,
+                    };
+                } else {
+                    panic!("Unexpected empty string!");
+                }
+                let new_token_stream = TokenStream {
+                    token: new_err_token,
+                    next_token: Box::new(None),
+                };
+                token_stream.next_token = Box::new(Some(&new_token_stream));
+                *buffer = buffer[1..buffer.len()].to_string();
+                return fold(buffer, start_position + 1, new_token_stream, true);
+            }
+            return token_stream;
+        }
+    }
+}
 
 fn lex_file(path: &Path) -> Option<TokenStream> {
     let file = File::open(path).expect(&format!("Failed to open file, {}", path.to_string_lossy()));
