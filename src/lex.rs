@@ -108,12 +108,46 @@ fn get_non_range_token(buffer: &str) -> Option<Token> {
         _ => None,
     }
 }
+
 struct TokenStream {
     token: Token,
     next_token: Box<Option<TokenStream>>,
 }
 
-fn fold(token_stream: TokenStream, start_position: i32) {}
+/* recursively exhausts the string buffer
+// has side affects of emptying the string buffer*** and adding the tokens to the stream
+// When this function is called everything in the buffer is expected to be a valid token
+//    and the end of the current buffer is interpretted as the place to stop and fold
+//
+// EXAMPLE:
+// buffer -> "inta"
+// Loops through "inta" char by char possibly updating the token to add
+//    stops once it reaches the end.
+// After the end the int token is added and then fold is called with
+//    buffer -> "a"
+//
+// You may think that this might lead to erros on edge cases but it does not
+//
+// SPECIAL CASE****:
+// The buffer string may not be fully emptied yet return when there is a
+//    single unknown char left (perhaps more generally when SYMBOL_MAX_SIZE - 1
+//    chars are left).
+// We know that when this function is called at least 1 token must be present (unless there is an
+//      unknown token)
+// However, we may get an unknown token when exhuasting a 2 symbol buffer
+// buffer -> "=!", full_text = "=!="
+// = is a token
+// =! is not a token
+// = is added to the token stream
+// ! is not a valid token NOT reporting but skipping for now
+// Cannot assert that ! is unknown because it may be followed by an equal sign
+// Note that if this is the first call from the lex file we CAN assume the fold has a token
+// buffer -> "!{"
+// ! is not a token
+// !{ is not a token
+// ! is not a valid token reporting and skipping (no recursive call)
+*/
+fn fold(buffer: &mut String, start_position: i32, token_stream: &TokenStream) {}
 
 fn lex_file(path: &Path) -> Option<TokenStream> {
     let file = File::open(path).expect(&format!("Failed to open file, {}", path.to_string_lossy()));
