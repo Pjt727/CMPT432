@@ -3,6 +3,13 @@ use std::fs;
 use std::path::Path;
 mod lex;
 
+fn compile_steps(file: &Path) {
+    // TODO: LEX
+    // TODO: PARSE
+    // TODO: SEMANTIC ANALYSIS
+    // TODO: CODE GENERATION
+}
+
 fn main() {
     // the first arg is the target
     let args: Vec<String> = env::args().collect();
@@ -27,14 +34,16 @@ fn main() {
                     }
                 }
                 None => continue,
+                Some(extension) => 
+                    if extension != "txt" { continue; },
+                None => continue 
             }
-            // TODO LEX file_path
-            // file_path.as_ref()
+            compile_steps(file_path.as_path())
         }
     } else if let Some(extension) = first_path.extension() {
-        if (extension != ".txt") {
+        if extension != "txt" {
             panic!("That is not a valid filetype to compile!")
         }
-        // TODO LEX file_path
+        compile_steps(first_path)
     }
 }
