@@ -33,8 +33,8 @@ enum Symbol {
     CloseParenthesis,
     QuotatioinMark,
     Assignment,
-    CheckEqaulity,
-    CheckIneqaulity,
+    CheckEquality,
+    CheckInequality,
     Addition,
     EndProgram,
 }
@@ -110,12 +110,12 @@ fn get_non_range_token(buffer: &str, start_position: i32, end_position: i32) -> 
             end_position,
         }),
         "==" => Some(Token {
-            kind: TokenKind::Symbol(Symbol::CheckEqaulity),
+            kind: TokenKind::Symbol(Symbol::CheckEquality),
             start_position,
             end_position,
         }),
         "!=" => Some(Token {
-            kind: TokenKind::Symbol(Symbol::CheckIneqaulity),
+            kind: TokenKind::Symbol(Symbol::CheckInequality),
             start_position,
             end_position,
         }),
@@ -148,15 +148,10 @@ fn get_non_range_token(buffer: &str, start_position: i32, end_position: i32) -> 
     }
 }
 
-struct TokenStream {
-    token: Token,
-    next_token: Box<Option<&TokenStream>>,
-}
-
 /* recursively exhausts the string buffer
 // has side affects of emptying the string buffer*** and adding the tokens to the stream
 // When this function is called everything in the buffer is expected to be a valid token
-//    and the end of the current buffer is interpretted as the place to stop and fold
+//    and the end of the current buffer is interpreted as the place to stop and fold
 //
 // EXAMPLE:
 // buffer -> "inta"
@@ -165,7 +160,7 @@ struct TokenStream {
 // After the end the int token is added and then fold is called with
 //    buffer -> "a"
 //
-// You may think that this might lead to erros on edge cases but it does not
+// You may think that this might lead to errors on edge cases but it does not
 //
 // SPECIAL CASE****:
 // The buffer string may not be fully emptied yet return when there is a
@@ -173,7 +168,7 @@ struct TokenStream {
 //    chars are left).
 // We know that when this function is called at least 1 token must be present (unless there is an
 //      unknown token)
-// However, we may get an unknown token when exhuasting a 2 symbol buffer
+// However, we may get an unknown token when exhausting a 2 symbol buffer
 // buffer -> "=!", full_text = "=!="
 // = is a token
 // =! is not a token
@@ -186,38 +181,35 @@ struct TokenStream {
 // !{ is not a token
 // ! is not a valid token reporting and skipping (no recursive call)
 */
-fn fold(
+fn fold<'a> (
     buffer: &mut String,
     start_position: i32,
-    mut token_stream: TokenStream,
+    mut token_stream: Vec<Token>,
     is_recursive_call: bool,
-) -> TokenStream {
+) {
     let mut longest_token: Option<Token> = None;
-    let mut longest_token_length;
     for i in 1..buffer.len() {
         let end_position = start_position + i as i32;
         match get_non_range_token(&buffer[0..i], start_position, end_position) {
             Some(token) => {
                 longest_token = Some(token);
-                longest_token_length = i;
             }
             None => {}
         }
     }
     match longest_token {
         Some(token) => {
-            let new_token_stream = TokenStream {
-                token,
-                next_token: Box::new(None),
-            };
-            token_stream.next_token = Box::new(Some(&new_token_stream));
+            // need to the the position first bc the object will be moved
+            let token_end_position = token.end_position;
             let buffer_end_pos = (token.end_position - token.start_position) as usize;
+            token_stream.push(token);
             *buffer = buffer[buffer_end_pos..buffer.len()].to_string();
-            return fold(buffer, token.end_position, new_token_stream, true);
+            fold(buffer, token_end_position, token_stream, true);
+            return ();
         }
         None => {
             if !is_recursive_call {
-                // Because of the nature of the langauge
+                // Because of the nature of the language
                 //    lex error tokens can only be a single char.
                 let new_err_token;
                 if let Some(first_char) = buffer.chars().next() {
@@ -231,20 +223,17 @@ fn fold(
                 } else {
                     panic!("Unexpected empty string!");
                 }
-                let new_token_stream = TokenStream {
-                    token: new_err_token,
-                    next_token: Box::new(None),
-                };
-                token_stream.next_token = Box::new(Some(&new_token_stream));
+                token_stream.push(new_err_token);
                 *buffer = buffer[1..buffer.len()].to_string();
-                return fold(buffer, start_position + 1, new_token_stream, true);
+                fold(buffer, start_position + 1, token_stream, true);
+                return ()
             }
-            return token_stream;
+            return ();
         }
     }
 }
 
-fn lex_file(path: &Path) -> Option<TokenStream> {
+fn lex_file(path: &Path) -> Vec<Token> {
     let file = File::open(path).expect(&format!("Failed to open file, {}", path.to_string_lossy()));
     let reader = BufReader::new(file);
 
@@ -255,13 +244,14 @@ fn lex_file(path: &Path) -> Option<TokenStream> {
     let mut in_string = false;
     let mut last_is_symbol = false;
     let mut line_number = 1;
-    // set to negative to propely increment at start 0 since we preincrement
+    // set to negative to properly increment at start 0 since we preincrement
     let mut start_char_position = -1;
     let mut current_char_position = 0;
     let mut buffer = String::from("");
-    let token_stream = Default::default();
+    // let token_stream = Default::default();
+    let token_stream: Vec<Token> = Vec::new();
     for line in reader.lines() {
-        // poor preformance for insanely long single line files
+        // poor performance for insanely long single line files
         // can choose other deliminators
         let line = line.expect("Unexpected File Reading Error");
         for c in line.chars() {
@@ -287,7 +277,7 @@ fn lex_file(path: &Path) -> Option<TokenStream> {
                 // ----- close satire -----
 
                 // if buffer is currently string then fold bc it reached symbol
-                //    or if symbol litmit has exceded
+                //    or if symbol litmit has exceeded
             } else if !last_is_symbol
                 || ((start_char_position - current_char_position) > SYMBOL_MAX_SIZE)
             {
