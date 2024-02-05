@@ -1,16 +1,13 @@
-// 1. keyword
-// 2. id
-// 3. symbol
-// 4. digit
-// 5. char
-
-use regex::Regex;
+// SO SAD I DIDNT USE REGEX, but I really dont think it's the right way
+//    to go for this project
+// use regex::Regex;
 use std::{
     fs::File,
     i32,
     io::{BufRead, BufReader},
     path::Path,
 };
+use colored;
 
 enum Keyword {
     LoopOnTrue,
@@ -47,105 +44,149 @@ struct Char {
     letter: char,
 }
 
-struct Error {
-    character: char,
-}
-
 enum TokenKind {
     Keyword(Keyword),
     Id(Id),
     Symbol(Symbol),
     Digit(Digit),
     Char(Char),
-    Error(Error),
+}
+
+enum LexError {
+    InvalidChar(char),
+    MissingEndProgram,
 }
 
 struct Token {
-    kind: TokenKind,
-    start_position: i32,
-    end_position: i32,
+    kind: Result<TokenKind, LexError>,
+    start_end_position: (i32, i32),
+    // Tokens can only be 1 line as \n acts as fold for everything
+    line: i32,
+    representation: String,
 }
 
-// non char, id, and number range are single char that can use regex to
-// or other range techniques to discover
-// It also seems pointless to use regex here
+
 // Not sure what optimizations rust does during compilation
 //    but more match checks could only do ones of the correct
 //    str length
-fn get_non_range_token(buffer: &str, start_position: i32, end_position: i32) -> Option<Token> {
-    match buffer {
-        "boolean" => Some(Token {
-            kind: TokenKind::Keyword(Keyword::Boolean),
-            start_position,
-            end_position,
-        }),
-        "while" => Some(Token {
-            kind: TokenKind::Keyword(Keyword::LoopOnTrue),
-            start_position,
-            end_position,
-        }),
-        "print" => Some(Token {
-            kind: TokenKind::Keyword(Keyword::Print),
-            start_position,
-            end_position,
-        }),
-        "false" => Some(Token {
-            kind: TokenKind::Keyword(Keyword::False),
-            start_position,
-            end_position,
-        }),
-        "true" => Some(Token {
-            kind: TokenKind::Keyword(Keyword::True),
-            start_position,
-            end_position,
-        }),
-        "int" => Some(Token {
-            kind: TokenKind::Keyword(Keyword::Int),
-            start_position,
-            end_position,
-        }),
-        "if" => Some(Token {
-            kind: TokenKind::Keyword(Keyword::If),
-            start_position,
-            end_position,
-        }),
-        "==" => Some(Token {
-            kind: TokenKind::Symbol(Symbol::CheckEquality),
-            start_position,
-            end_position,
-        }),
-        "!=" => Some(Token {
-            kind: TokenKind::Symbol(Symbol::CheckInequality),
-            start_position,
-            end_position,
-        }),
-        "=" => Some(Token {
-            kind: TokenKind::Symbol(Symbol::Assignment),
-            start_position,
-            end_position,
-        }),
-        "(" => Some(Token {
-            kind: TokenKind::Symbol(Symbol::OpenParenthesis),
-            start_position,
-            end_position,
-        }),
-        ")" => Some(Token {
-            kind: TokenKind::Symbol(Symbol::CloseParenthesis),
-            start_position,
-            end_position,
-        }),
-        "{" => Some(Token {
-            kind: TokenKind::Symbol(Symbol::OpenBlock),
-            start_position,
-            end_position,
-        }),
-        "}" => Some(Token {
-            kind: TokenKind::Symbol(Symbol::CloseBlock),
-            start_position,
-            end_position,
-        }),
-        _ => None,
+fn get_token(buffer: &str, start_end_position: (i32, i32), line: i32, in_string: bool) -> Option<Token> {
+if buffer.len() == 1 {
+    let character = buffer.chars().next().unwrap();
+    if character >= 'a' && character <= 'z' {
+        if in_string {
+            return Some(Token{
+                kind: Ok(TokenKind::Char(Char{letter: character})),
+                start_end_position,
+                line,
+                representation: buffer.to_string()
+            })
+        }
+        return Some(Token{
+            kind: Ok(TokenKind::Id(Id{name: character})),
+            start_end_position,
+            line,
+            representation: buffer.to_string()
+
+        })
+    } else if character >= '0' && character <= '9' {
+        return Some(Token{
+            kind: Ok(TokenKind::Digit(Digit{value: character as u8})),
+            start_end_position,
+            line,
+            representation: buffer.to_string()
+
+        })
     }
+}
+
+match buffer {
+    "boolean" => Some(Token {
+        kind: Ok(TokenKind::Keyword(Keyword::Boolean)),
+        start_end_position,
+        line,
+        representation: buffer.to_string()
+
+    }),
+    "while" => Some(Token {
+        kind: Ok(TokenKind::Keyword(Keyword::LoopOnTrue)),
+        start_end_position,
+        line,
+        representation: buffer.to_string()
+    }),
+    "print" => Some(Token {
+        kind: Ok(TokenKind::Keyword(Keyword::Print)),
+        start_end_position,
+        line,
+        representation: buffer.to_string()
+    }),
+    "false" => Some(Token {
+        kind: Ok(TokenKind::Keyword(Keyword::False)),
+        start_end_position,
+        line,
+        representation: buffer.to_string()
+    }),
+    "true" => Some(Token {
+        kind: Ok(TokenKind::Keyword(Keyword::True)),
+        start_end_position,
+        line,
+        representation: buffer.to_string()
+    }),
+    "int" => Some(Token {
+        kind: Ok(TokenKind::Keyword(Keyword::Int)),
+        start_end_position,
+        line,
+        representation: buffer.to_string()
+    }),
+    "if" => Some(Token {
+        kind: Ok(TokenKind::Keyword(Keyword::If)),
+        start_end_position,
+        line,
+        representation: buffer.to_string()
+    }),
+    "==" => Some(Token {
+        kind: Ok(TokenKind::Symbol(Symbol::CheckEquality)),
+        start_end_position,
+        line,
+        representation: buffer.to_string()
+    }),
+    "!=" => Some(Token {
+        kind: Ok(TokenKind::Symbol(Symbol::CheckInequality)),
+        start_end_position,
+        line,
+        representation: buffer.to_string()
+    }),
+    "=" => Some(Token {
+        kind: Ok(TokenKind::Symbol(Symbol::Assignment)),
+        start_end_position,
+        line,
+        representation: buffer.to_string()
+    }),
+    "(" => Some(Token {
+        kind: Ok(TokenKind::Symbol(Symbol::OpenParenthesis)),
+        start_end_position,
+        line,
+        representation: buffer.to_string()
+    }),
+    ")" => Some(Token {
+        kind: Ok(TokenKind::Symbol(Symbol::CloseParenthesis)),
+        start_end_position,
+        line,
+        representation: buffer.to_string()
+    }),
+    "{" => Some(Token {
+        kind: Ok(TokenKind::Symbol(Symbol::OpenBlock)),
+        start_end_position,
+        line,
+        representation: buffer.to_string()
+    }),
+    "}" => Some(Token {
+        kind: Ok(TokenKind::Symbol(Symbol::CloseBlock)),
+        start_end_position,
+        line,
+        representation: buffer.to_string()
+    }),
+    _ => None,
+}
 }
 
 /* recursively exhausts the string buffer
@@ -181,16 +222,18 @@ fn get_non_range_token(buffer: &str, start_position: i32, end_position: i32) -> 
 // !{ is not a token
 // ! is not a valid token reporting and skipping (no recursive call)
 */
-fn fold<'a> (
+fn fold (
     buffer: &mut String,
+    line: i32,
     start_position: i32,
-    mut token_stream: Vec<Token>,
+    token_stream: &mut Vec<Token>,
+    in_string: bool,
     is_recursive_call: bool,
-) {
+) -> i32 {
     let mut longest_token: Option<Token> = None;
     for i in 1..buffer.len() {
         let end_position = start_position + i as i32;
-        match get_non_range_token(&buffer[0..i], start_position, end_position) {
+        match get_token(&buffer[0..i], (start_position, end_position), line, in_string) {
             Some(token) => {
                 longest_token = Some(token);
             }
@@ -200,37 +243,48 @@ fn fold<'a> (
     match longest_token {
         Some(token) => {
             // need to the the position first bc the object will be moved
-            let token_end_position = token.end_position;
-            let buffer_end_pos = (token.end_position - token.start_position) as usize;
+            let token_end_position = token.start_end_position.1;
+            let buffer_end_pos = (token_end_position - token.start_end_position.0 ) as usize;
             token_stream.push(token);
             *buffer = buffer[buffer_end_pos..buffer.len()].to_string();
-            fold(buffer, token_end_position, token_stream, true);
-            return ();
+            return fold(buffer, line, token_end_position, token_stream, in_string, true);
         }
         None => {
+            /*
+            Bc of how the buffers are formed there can
+              be a case where a recursive call incorrectly tries
+              to produce and error token
+              EX:  
+              =!=
+              The buffer would be =!
+            */
             if !is_recursive_call {
                 // Because of the nature of the language
                 //    lex error tokens can only be a single char.
                 let new_err_token;
                 if let Some(first_char) = buffer.chars().next() {
                     new_err_token = Token {
-                        kind: TokenKind::Error(Error {
-                            character: first_char,
-                        }),
-                        start_position,
-                        end_position: start_position + 1,
+                        kind: Err(LexError::InvalidChar(first_char)),
+                        start_end_position: (start_position, start_position + 1),
+                        line, 
+                        representation: first_char.to_string()
                     };
                 } else {
                     panic!("Unexpected empty string!");
                 }
                 token_stream.push(new_err_token);
                 *buffer = buffer[1..buffer.len()].to_string();
-                fold(buffer, start_position + 1, token_stream, true);
-                return ()
+                return fold(buffer, line, start_position + 1, token_stream, in_string, true);
             }
-            return ();
+            return start_position;
         }
     }
+}
+
+fn lex_process(token: Token) {
+    const INFO_TEXT: &str = "DEBUG INFO lex: ";
+    const ERROR_TEXT: &str = "DEBUG ERROR lex: ";
+
 }
 
 fn lex_file(path: &Path) -> Vec<Token> {
@@ -239,8 +293,6 @@ fn lex_file(path: &Path) -> Vec<Token> {
 
     const SYMBOL_MAX_SIZE: i32 = 2;
 
-    // we gotta use regex for something
-    let in_alphabet: Regex = Regex::new("a-z0-9{}[]!=").unwrap();
     let mut in_string = false;
     let mut last_is_symbol = false;
     let mut line_number = 1;
@@ -248,40 +300,48 @@ fn lex_file(path: &Path) -> Vec<Token> {
     let mut start_char_position = -1;
     let mut current_char_position = 0;
     let mut buffer = String::from("");
-    // let token_stream = Default::default();
-    let token_stream: Vec<Token> = Vec::new();
+    let mut token_stream: Vec<Token> = Vec::new();
     for line in reader.lines() {
         // poor performance for insanely long single line files
         // can choose other deliminators
         let line = line.expect("Unexpected File Reading Error");
         for c in line.chars() {
             current_char_position += 1;
+            let is_alpha = c >= 'a' && c <= 'z';
             // Character processing
-            if (c >= 'a' && c <= 'z') && !last_is_symbol {
+            if is_alpha && !last_is_symbol {
                 // do nothing because character followed by character
             } else if c == '"' {
-                // fold
+                start_char_position = fold(
+                    &mut buffer, line_number, start_char_position, &mut token_stream, in_string, false);
                 in_string = !in_string;
-                // Hey! isn't this technically a bit of parsing?
-                // ----- open satire -----
-                // Where do we draw the line?
-                // How far do we go?
-                // Do we return full string token?
-                // Do we return full blocks together with recursive types?
-                // Do we return just return the full CST?
-                // Do we just return the AST?
-                // Do we just return the generated code?
-                // Do we just execute the result of the program and return that?
-                // Do we just sense the intent of the programmer by reading their mind
-                //  and return the output?
-                // ----- close satire -----
+                /*
+                Hey! isn't this technically a bit of parsing?
+                ----- open satire -----
+                Where do we draw the line?
+                How far do we go?
+                Do we return full string token?
+                Do we return full blocks together with recursive types?
+                Do we return just return the full CST?
+                Do we just return the AST?
+                Do we just return the generated code?
+                Do we just execute the result of the program and return that?
+                Do we just sense the intent of the programmer by reading their mind
+                 and return the output?
+                ----- close satire -----
+                */
 
                 // if buffer is currently string then fold bc it reached symbol
-                //    or if symbol litmit has exceeded
+                //    or if symbol limit has exceeded
             } else if !last_is_symbol
-                || ((start_char_position - current_char_position) > SYMBOL_MAX_SIZE)
-            {
-                // fold
+                || ((start_char_position - current_char_position) > SYMBOL_MAX_SIZE) {
+                start_char_position = fold(
+                    &mut buffer, line_number, start_char_position, &mut token_stream, in_string, false);
+            }
+            if is_alpha {
+                last_is_symbol = false;
+            } else {
+                last_is_symbol = true;
             }
             buffer.push(c);
         }
