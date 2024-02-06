@@ -4,7 +4,7 @@ use std::path::Path;
 mod lex;
 
 fn compile_steps(file: &Path) {
-    // TODO: LEX
+    let _tokens = lex::lex_file(file);
     // TODO: PARSE
     // TODO: SEMANTIC ANALYSIS
     // TODO: CODE GENERATION
@@ -34,9 +34,6 @@ fn main() {
                     }
                 }
                 None => continue,
-                Some(extension) => 
-                    if extension != "txt" { continue; },
-                None => continue 
             }
             compile_steps(file_path.as_path())
         }
