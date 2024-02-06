@@ -289,8 +289,11 @@ fn fold(
               be a case where a recursive call incorrectly tries
               to produce and error token
               EX:
-              =!=
-              The buffer would be =!
+              "=!="
+              The buffer of symbol length two would be sent "=!"
+              = would be longest recognized token then leaving
+              just "!" has the recursive call when cannot be recognized for anything
+              even though it forms "!=" in the rest of the text
             */
             if !is_recursive_call {
                 // Because of the nature of the language
@@ -304,7 +307,8 @@ fn fold(
                         representation: first_char.to_string(),
                     };
                 } else {
-                    panic!("Unexpected empty string!");
+                    // string was empty so do nothing!!
+                    return start_position;
                 }
                 token_stream.push(new_err_token);
                 *buffer = buffer[1..buffer.len()].to_string();
@@ -339,13 +343,13 @@ fn process_lexeme(token: &Token) -> bool {
     match &token.kind {
         Ok(kind) => {
             let position_rep;
-            if token.start_end_position.0 == token.start_end_position.1 {
-                position_rep = format!("{}", token.start_end_position.0);
+
+            // I want to print ranges of position
+            let (start_pos, end_pos) = token.start_end_position;
+            if start_pos == end_pos {
+                position_rep = format!("{}", start_pos);
             } else {
-                position_rep = format!(
-                    "{}-{}",
-                    token.start_end_position.0, token.start_end_position.1,
-                )
+                position_rep = format!("{}-{}", start_pos, end_pos,)
             }
             println!(
                 "{} - {} [ {} ] found at ({}:{})",
@@ -374,7 +378,7 @@ fn process_lexeme(token: &Token) -> bool {
                 get_class_name(&kind),
                 token_representation,
                 token.line,
-                token.start_end_position.0 // errors have no pos or just 1 char
+                token.start_end_position.0
             );
             return false;
         }
