@@ -20,7 +20,7 @@ enum Keyword {
 }
 
 struct Id {
-    name: char, 
+    name: char,
 }
 
 enum Symbol {
@@ -252,10 +252,13 @@ fn fold(
     is_recursive_call: bool,
 ) -> i32 {
     let mut longest_token: Option<Token> = None;
-    for i in 1..buffer.len() {
-        let end_position = start_position + i as i32;
+    // dbg!(&buffer, 1..(buffer.len() + 1));
+    for end_range in 1..(buffer.len() + 1) {
+        // minus 1 bc it is an exclusive range
+        let end_position = start_position + end_range as i32;
+        dbg!(&buffer[0..end_range]);
         match get_token(
-            &buffer[0..i],
+            &buffer[0..end_range],
             (start_position, end_position),
             line,
             in_string,
@@ -268,11 +271,14 @@ fn fold(
     }
     match longest_token {
         Some(token) => {
-            // need to the the position first bc the object will be moved
+            // need to get position first bc the object will be moved
             let token_end_position = token.start_end_position.1;
-            let buffer_end_pos = (token_end_position - token.start_end_position.0) as usize;
+            let buffer_end_pos = token.representation.len();
+            dbg!(&token.representation, &buffer);
             token_stream.push(token);
+            dbg!(buffer_end_pos);
             *buffer = buffer[buffer_end_pos..buffer.len()].to_string();
+            dbg!(&buffer);
             return fold(
                 buffer,
                 line,
@@ -330,31 +336,27 @@ fn fold(
 //    or to match enums if it does not work well
 fn get_token_verbose_name(token: &TokenKind) -> &str {
     match token {
-        TokenKind::Keyword(keyword) => {
-            match keyword {
-                Keyword::LoopOnTrue => "LOOP_ON_TRUE",
-                Keyword::If => "IF_TRUE_DO",
-                Keyword::Boolean => "TYPE_BOOL",
-                Keyword::Int => "INT_TYPE",
-                Keyword::True => "LITERAL_TRUE",
-                Keyword::False => "LITERAL_FALSE",
-                Keyword::Print => "PRINT",
-            }
+        TokenKind::Keyword(keyword) => match keyword {
+            Keyword::LoopOnTrue => "LOOP_ON_TRUE",
+            Keyword::If => "IF_TRUE_DO",
+            Keyword::Boolean => "TYPE_BOOL",
+            Keyword::Int => "INT_TYPE",
+            Keyword::True => "LITERAL_TRUE",
+            Keyword::False => "LITERAL_FALSE",
+            Keyword::Print => "PRINT",
         },
         TokenKind::Id(_) => "IDENTIFIER",
-        TokenKind::Symbol(symbol) => {
-            match symbol {
-                Symbol::OpenBlock => "BLOCK_OPEN",
-                Symbol::CloseBlock => "BLOCK_CLOSE",
-                Symbol::OpenParenthesis => "PARENTHESIS_OPEN",
-                Symbol::CloseParenthesis => "PARENTHESIS_CLOSE",
-                Symbol::QuotatioinMark => "QUOTATION_MARK",
-                Symbol::Assignment => "ASSIGNMENT",
-                Symbol::CheckEquality => "CHECK_EQUALITY",
-                Symbol::CheckInequality => "CHECK_INEQUALITY",
-                Symbol::Addition => "OPERATOR_ADDITION",
-                Symbol::EndProgram => "END_OF_PROGRAM",
-            }
+        TokenKind::Symbol(symbol) => match symbol {
+            Symbol::OpenBlock => "BLOCK_OPEN",
+            Symbol::CloseBlock => "BLOCK_CLOSE",
+            Symbol::OpenParenthesis => "PARENTHESIS_OPEN",
+            Symbol::CloseParenthesis => "PARENTHESIS_CLOSE",
+            Symbol::QuotatioinMark => "QUOTATION_MARK",
+            Symbol::Assignment => "ASSIGNMENT",
+            Symbol::CheckEquality => "CHECK_EQUALITY",
+            Symbol::CheckInequality => "CHECK_INEQUALITY",
+            Symbol::Addition => "OPERATOR_ADDITION",
+            Symbol::EndProgram => "END_OF_PROGRAM",
         },
         TokenKind::Digit(_) => "LITERAL_DIGIT",
         TokenKind::Char(_) => "LITERAL_CHAR",
@@ -372,23 +374,24 @@ fn get_error_verbose_name(err: &LexError) -> &str {
 // Returns true if tokenkind is OK
 // Returns false if tokenkind is err
 fn process_lexeme(token: &Token) -> bool {
-    static INFO_TEXT: &str = "DEBUG INFO lex: ";
-    static ERROR_TEXT: &str = "DEBUG ERROR lex: ";
+    static INFO_TEXT: &str = "DEBUG INFO lex:";
+    static ERROR_TEXT: &str = "DEBUG ERROR lex:";
 
     match &token.kind {
         Ok(kind) => {
             let position_rep;
 
-            // I want to print ranges of position
+            // I want to print ranges of position only if they are not
+            //    1 char long
             let (start_pos, end_pos) = token.start_end_position;
-            if start_pos == end_pos {
+            if start_pos == end_pos - 1 {
                 position_rep = format!("{}", start_pos);
             } else {
                 position_rep = format!("{}-{}", start_pos, end_pos,)
             }
             println!(
                 "{} - {} [ {} ] found at ({}:{})",
-                INFO_TEXT.color("grey"),
+                INFO_TEXT.bold().underline(),
                 get_token_verbose_name(&kind),
                 token.representation,
                 token.line,
@@ -409,7 +412,7 @@ fn process_lexeme(token: &Token) -> bool {
             }
             println!(
                 "{} - {}{} found at ({}:{})",
-                ERROR_TEXT.red(),
+                ERROR_TEXT.bold().underline().red(),
                 get_error_verbose_name(&kind),
                 token_representation,
                 token.line,
@@ -444,20 +447,22 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
     const SYMBOL_MAX_SIZE: i32 = 2;
 
     let mut in_string = false;
-    let mut in_comment = true;
+    let mut in_comment = false;
     let mut last_is_symbol = false;
-    let mut line_number = 1;
+    let mut line_number = 0;
+    let mut start_char_position = 0;
     // set to negative to properly increment at start 0 since we preincrement
-    let mut start_char_position = -1;
-    let mut current_char_position = 0;
+    let mut current_char_position = -1;
     let mut buffer = String::from("");
     let mut token_stream: Vec<Token> = Vec::new();
     for line in reader.lines() {
         // poor performance for insanely long single line files
         // can choose other deliminators
+        line_number += 1;
         let line = line.expect("Unexpected File Reading Error");
         for c in line.chars() {
             current_char_position += 1;
+            dbg!(c, start_char_position, current_char_position, &buffer);
             // first check for comments
             // put this here bc comments dont generate tokens
             if !in_string && buffer == "/*" {
@@ -513,7 +518,7 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
                 // if buffer is currently string then fold bc it reached symbol
                 //    or if symbol limit has exceeded
             } else if !last_is_symbol
-                || ((start_char_position - current_char_position) > SYMBOL_MAX_SIZE)
+                || ((start_char_position - current_char_position + 1) >= SYMBOL_MAX_SIZE)
             {
                 start_char_position = fold(
                     &mut buffer,
@@ -531,7 +536,16 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
             }
             buffer.push(c);
         }
-        line_number += 1;
+        // \n is a terminator so fold here
+        // note this does not reset strings values so multi line strings are without err
+        fold(
+            &mut buffer,
+            line_number,
+            start_char_position,
+            &mut token_stream,
+            in_string,
+            false,
+        );
         current_char_position = -1;
     }
     // Need to fold for end of file
@@ -573,8 +587,8 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
 mod lex_tests {
     // imports the lex mod as lex_tests is a sub mod
     use super::*;
-    use std::path::Path;
     use std::env;
+    use std::path::Path;
 
     // helper function to determine if token sequences are "like"
     //     another
@@ -587,24 +601,22 @@ mod lex_tests {
             // kinda hacky are to do this but its testing
             //     so who cares???
             match &token1.kind {
-                Ok(token_kind1) => {
-                    match &token2.kind {
-                        Ok(token_kind2) => {
-                            if !(get_token_verbose_name(&token_kind1) == get_token_verbose_name(&token_kind2)){
-                                return false
-                            }
-                        },
-                        Err(_) => return false,
+                Ok(token_kind1) => match &token2.kind {
+                    Ok(token_kind2) => {
+                        if !(get_token_verbose_name(&token_kind1)
+                            == get_token_verbose_name(&token_kind2))
+                        {
+                            return false;
+                        }
                     }
+                    Err(_) => return false,
                 },
-                Err(err1) => {
-                    match &token2.kind {
-                        Ok(_) => return false,
-                        Err(err2) => {
-                            if !(get_error_verbose_name(&err1) == get_error_verbose_name(&err2)) {
-                                return false
-                            }
-                        },
+                Err(err1) => match &token2.kind {
+                    Ok(_) => return false,
+                    Err(err2) => {
+                        if !(get_error_verbose_name(&err1) == get_error_verbose_name(&err2)) {
+                            return false;
+                        }
                     }
                 },
             };
@@ -622,7 +634,7 @@ mod lex_tests {
                 representation: "".to_string(),
             },
             Token {
-                kind: Ok(TokenKind::Symbol(Symbol::OpenBlock)),
+                kind: Ok(TokenKind::Symbol(Symbol::CloseBlock)),
                 start_end_position: (0, 0),
                 line: 0,
                 representation: "".to_string(),
@@ -634,7 +646,7 @@ mod lex_tests {
                 representation: "".to_string(),
             },
         ];
-        let first_path = Path::new("/test_cases/ok/hello-compiler.txt");
+        let first_path = Path::new("test_cases/ok/hello-compiler.txt");
         let tokens = get_lexemes(first_path);
         let args: Vec<String> = env::args().collect();
         if !args.contains(&String::from("--terse")) {
