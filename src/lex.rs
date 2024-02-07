@@ -2,7 +2,6 @@
 //    to go for this project
 // use regex::Regex;
 use colored::Colorize;
-use std::any::type_name;
 use std::{
     fs::File,
     i32,
@@ -21,7 +20,7 @@ enum Keyword {
 }
 
 struct Id {
-    name: char,
+    name: char, 
 }
 
 enum Symbol {
@@ -329,8 +328,44 @@ fn fold(
 // Gets the class name of variable
 // Can change toggle to only include last n classes
 //    or to match enums if it does not work well
-fn get_class_name<T>(obj: &T) -> &str {
-    return type_name::<T>();
+fn get_token_verbose_name(token: &TokenKind) -> &str {
+    match token {
+        TokenKind::Keyword(keyword) => {
+            match keyword {
+                Keyword::LoopOnTrue => "LOOP_ON_TRUE",
+                Keyword::If => "IF_TRUE_DO",
+                Keyword::Boolean => "TYPE_BOOL",
+                Keyword::Int => "INT_TYPE",
+                Keyword::True => "LITERAL_TRUE",
+                Keyword::False => "LITERAL_FALSE",
+                Keyword::Print => "PRINT",
+            }
+        },
+        TokenKind::Id(_) => "IDENTIFIER",
+        TokenKind::Symbol(symbol) => {
+            match symbol {
+                Symbol::OpenBlock => "BLOCK_OPEN",
+                Symbol::CloseBlock => "BLOCK_CLOSE",
+                Symbol::OpenParenthesis => "PARENTHESIS_OPEN",
+                Symbol::CloseParenthesis => "PARENTHESIS_CLOSE",
+                Symbol::QuotatioinMark => "QUOTATION_MARK",
+                Symbol::Assignment => "ASSIGNMENT",
+                Symbol::CheckEquality => "CHECK_EQUALITY",
+                Symbol::CheckInequality => "CHECK_INEQUALITY",
+                Symbol::Addition => "OPERATOR_ADDITION",
+                Symbol::EndProgram => "END_OF_PROGRAM",
+            }
+        },
+        TokenKind::Digit(_) => "LITERAL_DIGIT",
+        TokenKind::Char(_) => "LITERAL_CHAR",
+    }
+}
+
+fn get_error_verbose_name(err: &LexError) -> &str {
+    match err {
+        LexError::InvalidChar(_) => "Unrecognized Character",
+        LexError::MissingEndProgram => "Missing EOP Symbol",
+    }
 }
 
 // processes a single token to the standard output
@@ -354,7 +389,7 @@ fn process_lexeme(token: &Token) -> bool {
             println!(
                 "{} - {} [ {} ] found at ({}:{})",
                 INFO_TEXT.color("grey"),
-                get_class_name(&kind),
+                get_token_verbose_name(&kind),
                 token.representation,
                 token.line,
                 position_rep
@@ -375,7 +410,7 @@ fn process_lexeme(token: &Token) -> bool {
             println!(
                 "{} - {}{} found at ({}:{})",
                 ERROR_TEXT.red(),
-                get_class_name(&kind),
+                get_error_verbose_name(&kind),
                 token_representation,
                 token.line,
                 token.start_end_position.0
@@ -386,14 +421,20 @@ fn process_lexeme(token: &Token) -> bool {
 }
 
 // Processes multiple tokens
-// Returns true if all tokenkind is OK
-// Returns false if any tokenkind is err
-fn process_lexemes(tokens: &Vec<Token>) -> bool {
+// Returns true if all tokenkind is Ok up to eop
+//    or Returns false if any tokenkind is Err
+// Returns the index of the first eop if it exists
+pub fn process_lexemes(tokens: &Vec<Token>) -> (bool, Option<usize>) {
     let mut is_ok = true;
-    for token in tokens {
+    let mut end_size = None;
+    for (index, token) in tokens.iter().enumerate() {
         is_ok = is_ok && process_lexeme(token);
+        if matches!(token.kind, Ok(TokenKind::Symbol(Symbol::EndProgram))) {
+            end_size = Some(index);
+            break;
+        }
     }
-    return is_ok;
+    return (is_ok, end_size);
 }
 
 pub fn get_lexemes(path: &Path) -> Vec<Token> {
@@ -434,7 +475,7 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
                 //     of dummy char put at start of comment
                 if buffer == "*/" {
                     in_comment = false;
-                    buffer = "";
+                    buffer = "".to_string();
                 }
                 continue;
             }
@@ -515,12 +556,12 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
         }
     }
     if !ends_with_eop {
-        let eop_error_token = (Token {
+        let eop_error_token = Token {
             kind: Err(LexError::MissingEndProgram),
             start_end_position: (start_char_position, start_char_position),
             line: line_number,
             representation: "$".to_string(),
-        });
+        };
         token_stream.push(eop_error_token);
     }
 
@@ -533,6 +574,7 @@ mod lex_tests {
     // imports the lex mod as lex_tests is a sub mod
     use super::*;
     use std::path::Path;
+    use std::env;
 
     // helper function to determine if token sequences are "like"
     //     another
@@ -540,18 +582,64 @@ mod lex_tests {
     //     to code that into a my test cases and I also it also
     //     helps for asserting likeness in the lex with/ without spaces
     fn tokens_are_like(tokens1: &Vec<Token>, tokens2: &Vec<Token>) -> bool {
-        let mut are_like = true;
         let zipped: Vec<_> = tokens1.iter().zip(tokens2.iter()).collect();
         for (token1, token2) in zipped {
-            let are_like = are_like && token1.kind == token2.kind;
+            // kinda hacky are to do this but its testing
+            //     so who cares???
+            match &token1.kind {
+                Ok(token_kind1) => {
+                    match &token2.kind {
+                        Ok(token_kind2) => {
+                            if !(get_token_verbose_name(&token_kind1) == get_token_verbose_name(&token_kind2)){
+                                return false
+                            }
+                        },
+                        Err(_) => return false,
+                    }
+                },
+                Err(err1) => {
+                    match &token2.kind {
+                        Ok(_) => return false,
+                        Err(err2) => {
+                            if !(get_error_verbose_name(&err1) == get_error_verbose_name(&err2)) {
+                                return false
+                            }
+                        },
+                    }
+                },
+            };
         }
-        return are_like;
+        return true;
     }
 
     #[test]
-    fn hello_world() {
-        let first_path = Path::new("/test_cases/ok/hello-world.txt");
-        let tokens = lex_file(first_path);
-        process_lexemes(&tokens);
+    fn hello_lex() {
+        let expected_tokens = vec![
+            Token {
+                kind: Ok(TokenKind::Symbol(Symbol::OpenBlock)),
+                start_end_position: (0, 0),
+                line: 0,
+                representation: "".to_string(),
+            },
+            Token {
+                kind: Ok(TokenKind::Symbol(Symbol::OpenBlock)),
+                start_end_position: (0, 0),
+                line: 0,
+                representation: "".to_string(),
+            },
+            Token {
+                kind: Ok(TokenKind::Symbol(Symbol::EndProgram)),
+                start_end_position: (0, 0),
+                line: 0,
+                representation: "".to_string(),
+            },
+        ];
+        let first_path = Path::new("/test_cases/ok/hello-compiler.txt");
+        let tokens = get_lexemes(first_path);
+        let args: Vec<String> = env::args().collect();
+        if !args.contains(&String::from("--terse")) {
+            process_lexemes(&tokens);
+        }
+        assert!(tokens_are_like(&expected_tokens, &tokens))
     }
 }
