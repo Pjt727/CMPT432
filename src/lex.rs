@@ -76,7 +76,7 @@ fn get_token(
 ) -> Option<Token> {
     if buffer.len() == 1 {
         let character = buffer.chars().next().unwrap();
-        if character >= 'a' && character <= 'z' {
+        if (character >= 'a' && character <= 'z') || character == ' ' {
             if in_string {
                 return Some(Token {
                     kind: Ok(TokenKind::Char(Char { letter: character })),
@@ -252,11 +252,9 @@ fn fold(
     is_recursive_call: bool,
 ) -> i32 {
     let mut longest_token: Option<Token> = None;
-    // dbg!(&buffer, 1..(buffer.len() + 1));
     for end_range in 1..(buffer.len() + 1) {
         // minus 1 bc it is an exclusive range
         let end_position = start_position + end_range as i32;
-        dbg!(&buffer[0..end_range]);
         match get_token(
             &buffer[0..end_range],
             (start_position, end_position),
@@ -274,11 +272,8 @@ fn fold(
             // need to get position first bc the object will be moved
             let token_end_position = token.start_end_position.1;
             let buffer_end_pos = token.representation.len();
-            dbg!(&token.representation, &buffer);
             token_stream.push(token);
-            dbg!(buffer_end_pos);
             *buffer = buffer[buffer_end_pos..buffer.len()].to_string();
-            dbg!(&buffer);
             return fold(
                 buffer,
                 line,
@@ -445,6 +440,7 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
     let reader = BufReader::new(file);
 
     const SYMBOL_MAX_SIZE: i32 = 2;
+    let allowed_but_skipped: Vec<char> = vec!['\t', ' '];
 
     let mut in_string = false;
     let mut in_comment = false;
@@ -462,29 +458,46 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
         let line = line.expect("Unexpected File Reading Error");
         for c in line.chars() {
             current_char_position += 1;
-            dbg!(c, start_char_position, current_char_position, &buffer);
+            dbg!(c, &buffer);
             // first check for comments
-            // put this here bc comments dont generate tokens
-            if !in_string && buffer == "/*" {
+            // put here here bc comments dont generate tokens
+            if in_comment {
+                // move sliding window one to the right
+                buffer = buffer.chars().skip(1).collect();
+                buffer.push(c);
+                // can check after push bc */ will never match on first chase bc
+                //     of dummy char put at start of comment
+                dbg!(c, &buffer);
+                if buffer == "*/" {
+                    in_comment = false;
+                    buffer = "".to_string();
+                }
+                continue;
+            } else if buffer == "/*" {
                 in_comment = true;
                 // hack to make buffer always 2 chars for buffer in comment
                 //    since we want a sliding window of two chars
                 buffer = "X".to_string();
                 buffer.push(c);
                 continue;
-            } else if in_comment {
-                // move sliding window one to the right
-                buffer = buffer.chars().skip(1).collect();
+            }
+
+            // in_string processing fold at each character
+            if in_string && buffer != "\""{
+                start_char_position = fold(
+                    &mut buffer,
+                    line_number,
+                    start_char_position,
+                    &mut token_stream,
+                    in_string,
+                    false,
+                );
+                in_string = !in_string;
                 buffer.push(c);
-                // can check after push bc */ will never match on first chase bc
-                //     of dummy char put at start of comment
-                if buffer == "*/" {
-                    in_comment = false;
-                    buffer = "".to_string();
-                }
                 continue;
             }
 
+            // regular out of context processing
             let is_next_alpha = c >= 'a' && c <= 'z';
             // Character processing
             if is_next_alpha && !last_is_symbol {
@@ -514,11 +527,20 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
                  and return the output?
                 ----- close satire -----
                 */
-
-                // if buffer is currently string then fold bc it reached symbol
-                //    or if symbol limit has exceeded
+                buffer.push(c);
+                // refold " char
+                start_char_position = fold(
+                    &mut buffer,
+                    line_number,
+                    start_char_position,
+                    &mut token_stream,
+                    in_string,
+                    false,
+                );
+            // if buffer is currently string then fold bc it reached symbol
+            //    or if symbol limit has exceeded
             } else if !last_is_symbol
-                || ((start_char_position - current_char_position + 1) >= SYMBOL_MAX_SIZE)
+                || ((current_char_position - start_char_position) >= SYMBOL_MAX_SIZE)
             {
                 start_char_position = fold(
                     &mut buffer,
@@ -534,10 +556,13 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
             } else {
                 last_is_symbol = true;
             }
-            buffer.push(c);
+
+            if !allowed_but_skipped.contains(&c) && !in_string {
+                buffer.push(c);
+            }
         }
         // \n is a terminator so fold here
-        // note this does not reset strings values so multi line strings are without err
+        // note this does not reset strings values so multi line strings should be without err
         fold(
             &mut buffer,
             line_number,
@@ -589,6 +614,34 @@ mod lex_tests {
     use super::*;
     use std::env;
     use std::path::Path;
+    use colored::Colorize;
+
+    // helper function to get the token from a rep to
+    //    make expected tests cases more readable
+    fn reps_to_tokens(reps: Vec<&str>) -> Vec<Token> {
+        let mut tokens = Vec::new();
+        let mut in_string = false;
+
+        for rep in reps {
+            match get_token(rep, (0, 0), 0, in_string) {
+                Some(token) => tokens.push(token),
+                None => {
+                    let unknown_err_token = Token {
+                        kind: Err(LexError::InvalidChar(rep.chars().next().unwrap() as char)),
+                        start_end_position: (0, 0),
+                        line: 0,
+                        representation: "".to_string(),
+                    };
+                    tokens.push(unknown_err_token);
+                }
+            }
+            if rep == "\"" {
+                in_string = !in_string;
+            }
+        }
+
+        return tokens
+    }
 
     // helper function to determine if token sequences are "like"
     //     another
@@ -596,6 +649,9 @@ mod lex_tests {
     //     to code that into a my test cases and I also it also
     //     helps for asserting likeness in the lex with/ without spaces
     fn tokens_are_like(tokens1: &Vec<Token>, tokens2: &Vec<Token>) -> bool {
+        static DIF_DOWN: &str = "DIFF ↓ ↓ ↓ ↓ ↓ ↓ ";
+        static DIF_UP: &str = "DIFF ↑ ↑ ↑ ↑ ↑ ↑ \n";
+        let mut are_like_flag = true;
         let zipped: Vec<_> = tokens1.iter().zip(tokens2.iter()).collect();
         for (token1, token2) in zipped {
             // kinda hacky are to do this but its testing
@@ -606,52 +662,115 @@ mod lex_tests {
                         if !(get_token_verbose_name(&token_kind1)
                             == get_token_verbose_name(&token_kind2))
                         {
-                            return false;
+                            println!("{}", DIF_DOWN.red());
+                            process_lexeme(&token1);
+                            process_lexeme(&token2);
+                            println!("{}", DIF_UP.red());
+                            are_like_flag = false;
                         }
                     }
-                    Err(_) => return false,
+                    Err(_) => {
+                            println!("{}", DIF_DOWN.red());
+                        process_lexeme(&token1);
+                        process_lexeme(&token2);
+                            println!("{}", DIF_UP.red());
+                        are_like_flag = false;
+                    },
                 },
                 Err(err1) => match &token2.kind {
-                    Ok(_) => return false,
+                    Ok(_) => { 
+                            println!("{}", DIF_DOWN.red());
+                        process_lexeme(&token1);
+                        process_lexeme(&token2);
+                            println!("{}", DIF_UP.red());
+                        are_like_flag = false;
+                    },
                     Err(err2) => {
                         if !(get_error_verbose_name(&err1) == get_error_verbose_name(&err2)) {
-                            return false;
+                            println!("{}", DIF_DOWN.red());
+                            process_lexeme(&token1);
+                            process_lexeme(&token2);
+                            println!("{}", DIF_UP.red());
+                            are_like_flag = false;
                         }
                     }
                 },
             };
         }
-        return true;
+        if tokens1.len() != tokens2.len() {
+            if tokens1.len() > tokens2.len() {
+                println!("{}", "FIRST TOKENS GENERATED MORE TOKENS".red());
+            } else {
+                println!("{}", "SECOND TOKENS GENERATED MORE TOKENS".red());
+            }
+            return false;
+        }
+        return are_like_flag;
     }
 
     #[test]
     fn hello_lex() {
-        let expected_tokens = vec![
-            Token {
-                kind: Ok(TokenKind::Symbol(Symbol::OpenBlock)),
-                start_end_position: (0, 0),
-                line: 0,
-                representation: "".to_string(),
-            },
-            Token {
-                kind: Ok(TokenKind::Symbol(Symbol::CloseBlock)),
-                start_end_position: (0, 0),
-                line: 0,
-                representation: "".to_string(),
-            },
-            Token {
-                kind: Ok(TokenKind::Symbol(Symbol::EndProgram)),
-                start_end_position: (0, 0),
-                line: 0,
-                representation: "".to_string(),
-            },
+        // file: {}$
+        let expected_reps = vec![
+            "{", "}", "$"
         ];
-        let first_path = Path::new("test_cases/ok/hello-compiler.txt");
-        let tokens = get_lexemes(first_path);
-        let args: Vec<String> = env::args().collect();
-        if !args.contains(&String::from("--terse")) {
-            process_lexemes(&tokens);
-        }
+        let expected_tokens = reps_to_tokens(expected_reps);
+        let path = Path::new("test_cases/ok/hello-compiler.txt");
+        let tokens = get_lexemes(path);
+        process_lexemes(&tokens);
         assert!(tokens_are_like(&expected_tokens, &tokens))
     }
+
+    #[test]
+    fn three_symbols() {
+        // file: =!=
+        let expected_reps = vec![ "=", "!="];
+        let missing_eop = Token {
+            kind: Err(LexError::MissingEndProgram),
+            start_end_position: (0, 0),
+            line: 0,
+            representation: "".to_string(),
+        };
+        let mut expected_tokens = reps_to_tokens(expected_reps);
+        expected_tokens.push(missing_eop);
+        let path = Path::new("test_cases/ok/three-symbols.txt");
+        let tokens = get_lexemes(path);
+        process_lexemes(&tokens);
+        assert!(tokens_are_like(&expected_tokens, &tokens))
+    }
+
+   #[test]
+    fn lex_with_and_without_spaces() {
+        let expected_reps = vec![
+            "{", 
+                "int", "a", 
+                "int", "b", 
+                "a", "=", "0", 
+                "b", "=", "0", 
+                "while", "(", "a", "!=", "3", ")", "{", 
+                    "print", "(", "a", ")",
+                    "while", "(", "b", "!=", "3", ")", "{", 
+                        "print", "(", "b", ")",
+                        "b", "=", "1", "+", "b", 
+                        "if", "(", "b", "==", "2", ")", "{", 
+                            "print", "(", "\"", 
+                                "t", "h", "e", "r", "e", " ",
+                                "i", "s", " ",
+                                "n", "o", " ", 
+                                "s", "p", "o", "o", "n", 
+                            "\"", ")",
+                        "}", 
+                    "}",
+                    "b", "=", "0", 
+                    "a", "=", "1", "+", "a",
+                "}",
+            "}", "$"
+        ];
+        let expected_tokens = reps_to_tokens(expected_reps);
+        let path_with_spaces = Path::new("test_cases/ok/lex-with-spaces-no-comments.txt");
+        let tokens_with_spaces = get_lexemes(path_with_spaces);
+        process_lexemes(&tokens_with_spaces);
+        assert!(tokens_are_like(&expected_tokens, &tokens_with_spaces));
+    }
 }
+
