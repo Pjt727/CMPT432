@@ -19,6 +19,8 @@ enum Keyword {
     Print,
 }
 
+// will read from these later
+#[allow(dead_code)]
 struct Id {
     name: char,
 }
@@ -36,10 +38,14 @@ enum Symbol {
     EndProgram,
 }
 
+// will read from these later
+#[allow(dead_code)]
 struct Digit {
     value: u8,
 }
 
+// will read from these later
+#[allow(dead_code)]
 struct Char {
     letter: char,
 }
@@ -74,17 +80,36 @@ fn get_token(
     line: i32,
     in_string: bool,
 ) -> Option<Token> {
-    if buffer.len() == 1 {
+    // in_string only ever processes a single character
+    let buffer_is_length_one = buffer.len() == 1;
+    if in_string {
+        if !buffer_is_length_one {
+            return None;
+        }
         let character = buffer.chars().next().unwrap();
         if (character >= 'a' && character <= 'z') || character == ' ' {
-            if in_string {
-                return Some(Token {
-                    kind: Ok(TokenKind::Char(Char { letter: character })),
-                    start_end_position,
-                    line,
-                    representation: buffer.to_string(),
-                });
-            }
+            return Some(Token {
+                kind: Ok(TokenKind::Char(Char { letter: character })),
+                start_end_position,
+                line,
+                representation: buffer.to_string(),
+            });
+        }
+        if character == '\"' {
+            return Some(Token {
+                kind: Ok(TokenKind::Symbol(Symbol::QuotatioinMark)),
+                start_end_position,
+                line,
+                representation: buffer.to_string(),
+            });
+        }
+        // could maybe just emit the error here to
+        //     speed things up since no symbols are allowed to be in quotes
+        return None;
+    } else if buffer_is_length_one {
+        // range matches for the single chars
+        let character = buffer.chars().next().unwrap();
+        if character >= 'a' && character <= 'z' {
             return Some(Token {
                 kind: Ok(TokenKind::Id(Id { name: character })),
                 start_end_position,
@@ -103,6 +128,7 @@ fn get_token(
         }
     }
 
+    // string matches for all non range words
     match buffer {
         "boolean" => Some(Token {
             kind: Ok(TokenKind::Keyword(Keyword::Boolean)),
@@ -269,6 +295,11 @@ fn fold(
     }
     match longest_token {
         Some(token) => {
+            // only for testing purposes do I want to process the token as it is made
+            #[cfg(test)]
+            {
+                process_lexeme(&token);
+            }
             // need to get position first bc the object will be moved
             let token_end_position = token.start_end_position.1;
             let buffer_end_pos = token.representation.len();
@@ -306,6 +337,11 @@ fn fold(
                         line,
                         representation: first_char.to_string(),
                     };
+                    // only for testing purposes do I want to process the token as it is made
+                    #[cfg(test)]
+                    {
+                        process_lexeme(&new_err_token);
+                    }
                 } else {
                     // string was empty so do nothing!!
                     return start_position;
@@ -444,11 +480,9 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
 
     let mut in_string = false;
     let mut in_comment = false;
-    let mut last_is_symbol = false;
+    let mut is_last_alpha = false;
     let mut line_number = 0;
     let mut start_char_position = 0;
-    // set to negative to properly increment at start 0 since we preincrement
-    let mut current_char_position = -1;
     let mut buffer = String::from("");
     let mut token_stream: Vec<Token> = Vec::new();
     for line in reader.lines() {
@@ -457,8 +491,7 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
         line_number += 1;
         let line = line.expect("Unexpected File Reading Error");
         for c in line.chars() {
-            current_char_position += 1;
-            dbg!(c, &buffer);
+            dbg!(c, &buffer, in_string);
             // first check for comments
             // put here here bc comments dont generate tokens
             if in_comment {
@@ -482,8 +515,14 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
                 continue;
             }
 
-            // in_string processing fold at each character
-            if in_string && buffer != "\""{
+            // in_string processing can fold at each character
+            if in_string {
+                if c == '"' {
+                    in_string = false;
+                }
+                // push before bc " starts empty
+                buffer.push(c);
+                dbg!("Folding String");
                 start_char_position = fold(
                     &mut buffer,
                     line_number,
@@ -492,17 +531,24 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
                     in_string,
                     false,
                 );
-                in_string = !in_string;
-                buffer.push(c);
                 continue;
             }
 
             // regular out of context processing
             let is_next_alpha = c >= 'a' && c <= 'z';
-            // Character processing
-            if is_next_alpha && !last_is_symbol {
-                // do nothing because character followed by character
-            } else if c == '"' {
+            // not that buffer_size is not always
+            //   equal to its range in my interpretation of the language
+            //   "! =" should become the not eqaul token "!\n=" should become
+            //   an error token token for ! and then and eqauls token
+            //   new line white space is treated differently
+            let buffer_size = buffer.len();
+            // when compiled with optimization I am pretty sure that rust will be able
+            //    to tell that when calculating these bools there are no side effects
+            //    and thus can hoist them so that the have the possibity of short circuiting
+            let switched_type = (is_next_alpha != is_last_alpha) && (buffer_size > 1);
+            let execedes_symbol_size = (buffer_size as i32 >= SYMBOL_MAX_SIZE) && !is_last_alpha;
+            dbg!(is_next_alpha, execedes_symbol_size, switched_type);
+            if switched_type || execedes_symbol_size {
                 start_char_position = fold(
                     &mut buffer,
                     line_number,
@@ -511,54 +557,43 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
                     in_string,
                     false,
                 );
-                in_string = !in_string;
-                /*
-                Hey! isn't this technically a bit of parsing?
-                ----- open satire -----
-                Where do we draw the line?
-                How far do we go?
-                Do we return full string token?
-                Do we return full blocks together with recursive types?
-                Do we return just return the full CST?
-                Do we just return the AST?
-                Do we just return the generated code?
-                Do we just execute the result of the program and return that?
-                Do we just sense the intent of the programmer by reading their mind
-                 and return the output?
-                ----- close satire -----
-                */
-                buffer.push(c);
-                // refold " char
-                start_char_position = fold(
-                    &mut buffer,
-                    line_number,
-                    start_char_position,
-                    &mut token_stream,
-                    in_string,
-                    false,
-                );
-            // if buffer is currently string then fold bc it reached symbol
-            //    or if symbol limit has exceeded
-            } else if !last_is_symbol
-                || ((current_char_position - start_char_position) >= SYMBOL_MAX_SIZE)
-            {
-                start_char_position = fold(
-                    &mut buffer,
-                    line_number,
-                    start_char_position,
-                    &mut token_stream,
-                    in_string,
-                    false,
-                );
-            }
-            if is_next_alpha {
-                last_is_symbol = false;
-            } else {
-                last_is_symbol = true;
             }
 
+            if is_next_alpha {
+                is_last_alpha = is_next_alpha;
+            }
+
+            // string processing happens before so it can have differnt rules
             if !allowed_but_skipped.contains(&c) && !in_string {
+                if c == '\"' {
+                    // I dont flip bools bc i have a discrete path for in_string
+                    /*
+                    Hey! isn't this technically a bit of parsing?
+                    ----- open satire -----
+                    Where do we draw the line?
+                    How far do we go?
+                    Do we return full string token?
+                    Do we return full blocks together with recursive types?
+                    Do we return just return the full CST?
+                    Do we just return the AST?
+                    Do we just return the generated code?
+                    Do we just execute the result of the program and return that?
+                    Do we just sense the intent of the programmer by reading their mind
+                     and return the output?
+                    ----- close satire -----
+                    */
+                    start_char_position = fold(
+                        &mut buffer,
+                        line_number,
+                        start_char_position,
+                        &mut token_stream,
+                        in_string,
+                        false,
+                    );
+                    in_string = true;
+                }
                 buffer.push(c);
+            } else {
             }
         }
         // \n is a terminator so fold here
@@ -571,7 +606,7 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
             in_string,
             false,
         );
-        current_char_position = -1;
+        start_char_position = 0;
     }
     // Need to fold for end of file
     start_char_position = fold(
@@ -612,9 +647,8 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
 mod lex_tests {
     // imports the lex mod as lex_tests is a sub mod
     use super::*;
-    use std::env;
-    use std::path::Path;
     use colored::Colorize;
+    use std::path::Path;
 
     // helper function to get the token from a rep to
     //    make expected tests cases more readable
@@ -640,7 +674,7 @@ mod lex_tests {
             }
         }
 
-        return tokens
+        return tokens;
     }
 
     // helper function to determine if token sequences are "like"
@@ -670,21 +704,21 @@ mod lex_tests {
                         }
                     }
                     Err(_) => {
-                            println!("{}", DIF_DOWN.red());
+                        println!("{}", DIF_DOWN.red());
                         process_lexeme(&token1);
                         process_lexeme(&token2);
-                            println!("{}", DIF_UP.red());
+                        println!("{}", DIF_UP.red());
                         are_like_flag = false;
-                    },
+                    }
                 },
                 Err(err1) => match &token2.kind {
-                    Ok(_) => { 
-                            println!("{}", DIF_DOWN.red());
+                    Ok(_) => {
+                        println!("{}", DIF_DOWN.red());
                         process_lexeme(&token1);
                         process_lexeme(&token2);
-                            println!("{}", DIF_UP.red());
+                        println!("{}", DIF_UP.red());
                         are_like_flag = false;
-                    },
+                    }
                     Err(err2) => {
                         if !(get_error_verbose_name(&err1) == get_error_verbose_name(&err2)) {
                             println!("{}", DIF_DOWN.red());
@@ -711,20 +745,17 @@ mod lex_tests {
     #[test]
     fn hello_lex() {
         // file: {}$
-        let expected_reps = vec![
-            "{", "}", "$"
-        ];
+        let expected_reps = vec!["{", "}", "$"];
         let expected_tokens = reps_to_tokens(expected_reps);
         let path = Path::new("test_cases/ok/hello-compiler.txt");
         let tokens = get_lexemes(path);
-        process_lexemes(&tokens);
         assert!(tokens_are_like(&expected_tokens, &tokens))
     }
 
     #[test]
     fn three_symbols() {
         // file: =!=
-        let expected_reps = vec![ "=", "!="];
+        let expected_reps = vec!["=", "!="];
         let missing_eop = Token {
             kind: Err(LexError::MissingEndProgram),
             start_end_position: (0, 0),
@@ -735,11 +766,12 @@ mod lex_tests {
         expected_tokens.push(missing_eop);
         let path = Path::new("test_cases/ok/three-symbols.txt");
         let tokens = get_lexemes(path);
-        process_lexemes(&tokens);
         assert!(tokens_are_like(&expected_tokens, &tokens))
     }
 
-   #[test]
+    // skip formatting to make expected more readible
+    #[rustfmt::skip]
+    #[test]
     fn lex_with_and_without_spaces() {
         let expected_reps = vec![
             "{", 
@@ -767,10 +799,14 @@ mod lex_tests {
             "}", "$"
         ];
         let expected_tokens = reps_to_tokens(expected_reps);
-        let path_with_spaces = Path::new("test_cases/ok/lex-with-spaces-no-comments.txt");
-        let tokens_with_spaces = get_lexemes(path_with_spaces);
-        process_lexemes(&tokens_with_spaces);
+        let path_with_spaces_no_comments = Path::new("test_cases/ok/lex-with-spaces-no-comments.txt");
+        let path_with_spaces = Path::new("test_cases/ok/lex-with-spaces.txt");
+        let path_without_spaces = Path::new("test_cases/ok/lex-without-spaces.txt");
+        let tokens_with_spaces_no_comments = get_lexemes(path_with_spaces);
+        let tokens_with_spaces = get_lexemes(path_with_spaces_no_comments);
+        let tokens_without_spaces = get_lexemes(path_without_spaces);
         assert!(tokens_are_like(&expected_tokens, &tokens_with_spaces));
+        assert!(tokens_are_like(&expected_tokens, &tokens_without_spaces));
+        assert!(tokens_are_like(&expected_tokens, &tokens_with_spaces_no_comments));
     }
 }
-
