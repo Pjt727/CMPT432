@@ -434,9 +434,10 @@ fn get_error_text(problem: &LexProblem) -> String {
 // processes a single token to the standard output
 // Returns true if tokenkind is OK
 // Returns false if tokenkind is err
-fn process_lexeme(token_entry: &Result<Token, LexProblem>) -> bool {
+fn process_lexeme(token_entry: &Result<Token, LexProblem>) {
     static INFO_TEXT: &str = "DEBUG INFO lex:";
     static ERROR_TEXT: &str = "DEBUG ERROR lex:";
+    static WARNING_TEXT: &str = "DEBUG WARNING lex:";
 
     match &token_entry {
         Ok(token) => {
@@ -452,52 +453,55 @@ fn process_lexeme(token_entry: &Result<Token, LexProblem>) -> bool {
             }
             println!(
                 "{} - {} [ {} ] found at ({}:{})",
-                INFO_TEXT.bold().underline(),
+                INFO_TEXT.cyan(),
                 get_token_verbose_name(&token.kind),
                 token.representation,
                 token.line,
                 position_rep
             );
-            return true;
         }
-        Err(lex_problem) => {
-            println!(
-                // I want to let the error verbose name come up
-                //   deal with must of the text
-                "{} - {}",
-                ERROR_TEXT.bold().underline().red(),
-                get_error_text(&lex_problem),
-            );
-            match lex_problem {
-                LexProblem::LexError(_) => return false,
-                LexProblem::LexWarning(_) => return true,
+        Err(lex_problem) => match lex_problem {
+            LexProblem::LexError(_) => {
+                println!("{} - {}", ERROR_TEXT.red(), get_error_text(&lex_problem),);
             }
-        }
+            LexProblem::LexWarning(_) => {
+                println!(
+                    "{} - {}",
+                    WARNING_TEXT.yellow(),
+                    get_error_text(&lex_problem),
+                );
+            }
+        },
     }
 }
 
 // Processes multiple tokens
-// Returns true if all tokenkind is Ok up to eop
-//    or Returns false if any tokenkind is Err
+// Returns a tuple of lex errors and lex warnings up to the end
+//    could make this into a another type to make it more obvious
 // Returns the index of the first eop if it exists
 // Needs the generic tomfoolery to allow for vector slicing
-pub fn process_lexemes<'a, T>(token_entries: T) -> (bool, Option<usize>)
+pub fn process_lexemes<'a, T>(token_entries: T) -> ((i32, i32), Option<usize>)
 where
     T: Iterator<Item = &'a Result<Token, LexProblem>>,
 {
-    let mut is_ok = true;
     let mut end_process = None;
+    let mut errors_and_warnings = (0, 0);
     for (index, token_entry) in token_entries.enumerate() {
-        is_ok = is_ok && process_lexeme(&token_entry);
-
-        if let Ok(token) = token_entry {
-            if matches!(token.kind, TokenKind::Symbol(Symbol::EndProgram)) {
-                end_process = Some(index);
-                break;
+        process_lexeme(&token_entry);
+        match token_entry {
+            Ok(token) => {
+                if matches!(token.kind, TokenKind::Symbol(Symbol::EndProgram)) {
+                    end_process = Some(index);
+                    break;
+                }
             }
+            Err(lex_problem) => match lex_problem {
+                LexProblem::LexError(_) => errors_and_warnings.0 += 1,
+                LexProblem::LexWarning(_) => errors_and_warnings.1 += 1,
+            },
         }
     }
-    return (is_ok, end_process);
+    return (errors_and_warnings, end_process);
 }
 
 pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
@@ -520,7 +524,6 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
         line_number += 1;
         let line = line.expect("Unexpected File Reading Error");
         for c in line.chars() {
-            dbg!(c, &buffer, in_string);
             // first check for comments
             // put here here bc comments dont generate tokens
             if in_comment {
@@ -529,7 +532,6 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
                 buffer.push(c);
                 // can check after push bc */ will never match on first chase bc
                 //     of dummy char put at start of comment
-                dbg!(c, &buffer);
                 if buffer == "*/" {
                     in_comment = false;
                     buffer = "".to_string();
@@ -551,7 +553,6 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
                 }
                 // push before bc " starts empty
                 buffer.push(c);
-                dbg!("Folding String");
                 start_char_position = fold(
                     &mut buffer,
                     line_number,
@@ -576,7 +577,6 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
             //    and thus can hoist them so that the have the possibity of short circuiting
             let switched_type = (is_next_alpha != is_last_alpha) && (buffer_size > 1);
             let execedes_symbol_size = (buffer_size as i32 >= SYMBOL_MAX_SIZE) && !is_last_alpha;
-            dbg!(is_next_alpha, execedes_symbol_size, switched_type);
             if switched_type || execedes_symbol_size {
                 start_char_position = fold(
                     &mut buffer,
@@ -847,13 +847,16 @@ mod lex_tests {
     #[test]
     fn symbols_and_spaces() {
         // file:
-        // = =
+        // ! =
+        // !
         // =
-        // =
+        // =! =
         // This seems like odd behavior maybe change
         //    but it is what I expected with how I dealt with
-        //    spaces
-        let expected_reps = vec!["==", "=", "="];
+        //    spaces and it is sort of difficult bc it would
+        let expected_reps = vec!["!=", "!", "=", "=", "!="];
+        // IF I CHANGE IT the expected would be the following
+        // let expected_reps = vec!["!", "=", "!", "=", "=", "!", "="];
         let expected_tokens = reps_to_tokens(expected_reps);
         let path = Path::new("test_cases/ok/symbols_and_white_space.txt");
         let tokens = get_lexemes(path);
