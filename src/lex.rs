@@ -58,13 +58,30 @@ enum TokenKind {
     Char(Char),
 }
 
-enum LexError {
-    InvalidChar(char),
-    MissingEndProgram,
+pub struct InvalidChar {
+    character: char,
+    line: i32,
+    position: i32,
 }
 
+pub enum LexError {
+    InvalidChar(InvalidChar),
+}
+
+pub enum LexWarning {
+    MissingEndProgram,
+    MissingCommentClose,
+}
+
+pub enum LexProblem {
+    LexError(LexError),
+    LexWarning(LexWarning),
+}
+
+// depending on how I want to implement future tokens for the other steps
+//    I may put the token declartion in a different file
 pub struct Token {
-    kind: Result<TokenKind, LexError>,
+    kind: TokenKind,
     start_end_position: (i32, i32),
     // Tokens can only be 1 line as \n acts as fold for everything
     line: i32,
@@ -89,7 +106,7 @@ fn get_token(
         let character = buffer.chars().next().unwrap();
         if (character >= 'a' && character <= 'z') || character == ' ' {
             return Some(Token {
-                kind: Ok(TokenKind::Char(Char { letter: character })),
+                kind: TokenKind::Char(Char { letter: character }),
                 start_end_position,
                 line,
                 representation: buffer.to_string(),
@@ -97,7 +114,7 @@ fn get_token(
         }
         if character == '\"' {
             return Some(Token {
-                kind: Ok(TokenKind::Symbol(Symbol::QuotatioinMark)),
+                kind: TokenKind::Symbol(Symbol::QuotatioinMark),
                 start_end_position,
                 line,
                 representation: buffer.to_string(),
@@ -111,16 +128,16 @@ fn get_token(
         let character = buffer.chars().next().unwrap();
         if character >= 'a' && character <= 'z' {
             return Some(Token {
-                kind: Ok(TokenKind::Id(Id { name: character })),
+                kind: TokenKind::Id(Id { name: character }),
                 start_end_position,
                 line,
                 representation: buffer.to_string(),
             });
         } else if character >= '0' && character <= '9' {
             return Some(Token {
-                kind: Ok(TokenKind::Digit(Digit {
+                kind: TokenKind::Digit(Digit {
                     value: character as u8,
-                })),
+                }),
                 start_end_position,
                 line,
                 representation: buffer.to_string(),
@@ -131,103 +148,103 @@ fn get_token(
     // string matches for all non range words
     match buffer {
         "boolean" => Some(Token {
-            kind: Ok(TokenKind::Keyword(Keyword::Boolean)),
+            kind: TokenKind::Keyword(Keyword::Boolean),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         "while" => Some(Token {
-            kind: Ok(TokenKind::Keyword(Keyword::LoopOnTrue)),
+            kind: TokenKind::Keyword(Keyword::LoopOnTrue),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         "print" => Some(Token {
-            kind: Ok(TokenKind::Keyword(Keyword::Print)),
+            kind: TokenKind::Keyword(Keyword::Print),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         "false" => Some(Token {
-            kind: Ok(TokenKind::Keyword(Keyword::False)),
+            kind: TokenKind::Keyword(Keyword::False),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         "true" => Some(Token {
-            kind: Ok(TokenKind::Keyword(Keyword::True)),
+            kind: TokenKind::Keyword(Keyword::True),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         "int" => Some(Token {
-            kind: Ok(TokenKind::Keyword(Keyword::Int)),
+            kind: TokenKind::Keyword(Keyword::Int),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         "if" => Some(Token {
-            kind: Ok(TokenKind::Keyword(Keyword::If)),
+            kind: TokenKind::Keyword(Keyword::If),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         "==" => Some(Token {
-            kind: Ok(TokenKind::Symbol(Symbol::CheckEquality)),
+            kind: TokenKind::Symbol(Symbol::CheckEquality),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         "!=" => Some(Token {
-            kind: Ok(TokenKind::Symbol(Symbol::CheckInequality)),
+            kind: TokenKind::Symbol(Symbol::CheckInequality),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         "$" => Some(Token {
-            kind: Ok(TokenKind::Symbol(Symbol::EndProgram)),
+            kind: TokenKind::Symbol(Symbol::EndProgram),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         "=" => Some(Token {
-            kind: Ok(TokenKind::Symbol(Symbol::Assignment)),
+            kind: TokenKind::Symbol(Symbol::Assignment),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         "+" => Some(Token {
-            kind: Ok(TokenKind::Symbol(Symbol::Addition)),
+            kind: TokenKind::Symbol(Symbol::Addition),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         "\"" => Some(Token {
-            kind: Ok(TokenKind::Symbol(Symbol::QuotatioinMark)),
+            kind: TokenKind::Symbol(Symbol::QuotatioinMark),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         "(" => Some(Token {
-            kind: Ok(TokenKind::Symbol(Symbol::OpenParenthesis)),
+            kind: TokenKind::Symbol(Symbol::OpenParenthesis),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         ")" => Some(Token {
-            kind: Ok(TokenKind::Symbol(Symbol::CloseParenthesis)),
+            kind: TokenKind::Symbol(Symbol::CloseParenthesis),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         "{" => Some(Token {
-            kind: Ok(TokenKind::Symbol(Symbol::OpenBlock)),
+            kind: TokenKind::Symbol(Symbol::OpenBlock),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
         "}" => Some(Token {
-            kind: Ok(TokenKind::Symbol(Symbol::CloseBlock)),
+            kind: TokenKind::Symbol(Symbol::CloseBlock),
             start_end_position,
             line,
             representation: buffer.to_string(),
@@ -273,7 +290,7 @@ fn fold(
     buffer: &mut String,
     line: i32,
     start_position: i32,
-    token_stream: &mut Vec<Token>,
+    token_stream: &mut Vec<Result<Token, LexProblem>>,
     in_string: bool,
     is_recursive_call: bool,
 ) -> i32 {
@@ -295,15 +312,19 @@ fn fold(
     }
     match longest_token {
         Some(token) => {
-            // only for testing purposes do I want to process the token as it is made
-            #[cfg(test)]
-            {
-                process_lexeme(&token);
-            }
             // need to get position first bc the object will be moved
             let token_end_position = token.start_end_position.1;
             let buffer_end_pos = token.representation.len();
-            token_stream.push(token);
+            // to to create this variable so that I can send a reference
+            //     to the debug print and thne let the token_stream have
+            //     ownership
+            let token_entry = Ok(token);
+            // only for testing purposes do I want to process the token as it is made
+            #[cfg(test)]
+            {
+                process_lexeme(&token_entry);
+            }
+            token_stream.push(token_entry);
             *buffer = buffer[buffer_end_pos..buffer.len()].to_string();
             return fold(
                 buffer,
@@ -329,24 +350,23 @@ fn fold(
             if !is_recursive_call {
                 // Because of the nature of the language
                 //    lex error tokens can only be a single char.
-                let new_err_token;
+                let lex_problem;
                 if let Some(first_char) = buffer.chars().next() {
-                    new_err_token = Token {
-                        kind: Err(LexError::InvalidChar(first_char)),
-                        start_end_position: (start_position, start_position + 1),
+                    lex_problem = Err(LexProblem::LexError(LexError::InvalidChar(InvalidChar {
+                        character: first_char,
                         line,
-                        representation: first_char.to_string(),
-                    };
+                        position: start_position,
+                    })));
                     // only for testing purposes do I want to process the token as it is made
                     #[cfg(test)]
                     {
-                        process_lexeme(&new_err_token);
+                        process_lexeme(&lex_problem);
                     }
                 } else {
                     // string was empty so do nothing!!
                     return start_position;
                 }
-                token_stream.push(new_err_token);
+                token_stream.push(lex_problem);
                 *buffer = buffer[1..buffer.len()].to_string();
                 return fold(
                     buffer,
@@ -394,22 +414,32 @@ fn get_token_verbose_name(token: &TokenKind) -> &str {
     }
 }
 
-fn get_error_verbose_name(err: &LexError) -> &str {
-    match err {
-        LexError::InvalidChar(_) => "Unrecognized Character",
-        LexError::MissingEndProgram => "Missing EOP Symbol",
+fn get_error_text(problem: &LexProblem) -> String {
+    match problem {
+        LexProblem::LexError(LexError::InvalidChar(invalid_char)) => {
+            format!(
+                "Unrecognized Character [ {} ] at {}-{}",
+                invalid_char.character, invalid_char.line, invalid_char.position
+            )
+        }
+        LexProblem::LexWarning(LexWarning::MissingEndProgram) => {
+            format!("Missing EOP Symbol at End of Program")
+        }
+        LexProblem::LexWarning(LexWarning::MissingCommentClose) => {
+            format!("Missing Close Comment Symbol")
+        }
     }
 }
 
 // processes a single token to the standard output
 // Returns true if tokenkind is OK
 // Returns false if tokenkind is err
-fn process_lexeme(token: &Token) -> bool {
+fn process_lexeme(token_entry: &Result<Token, LexProblem>) -> bool {
     static INFO_TEXT: &str = "DEBUG INFO lex:";
     static ERROR_TEXT: &str = "DEBUG ERROR lex:";
 
-    match &token.kind {
-        Ok(kind) => {
+    match &token_entry {
+        Ok(token) => {
             let position_rep;
 
             // I want to print ranges of position only if they are not
@@ -423,33 +453,25 @@ fn process_lexeme(token: &Token) -> bool {
             println!(
                 "{} - {} [ {} ] found at ({}:{})",
                 INFO_TEXT.bold().underline(),
-                get_token_verbose_name(&kind),
+                get_token_verbose_name(&token.kind),
                 token.representation,
                 token.line,
                 position_rep
             );
             return true;
         }
-        Err(kind) => {
-            // errors may not have representations
-            // might be better form to have this as an option or representation
-            //    part of a different class so errors don't need it but
-            //    it is what it is
-            let token_representation;
-            if token.representation.len() == 0 {
-                token_representation = "".to_string();
-            } else {
-                token_representation = format!(" [ {} ]", token.representation)
-            }
+        Err(lex_problem) => {
             println!(
-                "{} - {}{} found at ({}:{})",
+                // I want to let the error verbose name come up
+                //   deal with must of the text
+                "{} - {}",
                 ERROR_TEXT.bold().underline().red(),
-                get_error_verbose_name(&kind),
-                token_representation,
-                token.line,
-                token.start_end_position.0
+                get_error_text(&lex_problem),
             );
-            return false;
+            match lex_problem {
+                LexProblem::LexError(_) => return false,
+                LexProblem::LexWarning(_) => return true,
+            }
         }
     }
 }
@@ -458,20 +480,27 @@ fn process_lexeme(token: &Token) -> bool {
 // Returns true if all tokenkind is Ok up to eop
 //    or Returns false if any tokenkind is Err
 // Returns the index of the first eop if it exists
-pub fn process_lexemes(tokens: &Vec<Token>) -> (bool, Option<usize>) {
+// Needs the generic tomfoolery to allow for vector slicing
+pub fn process_lexemes<'a, T>(token_entries: T) -> (bool, Option<usize>)
+where
+    T: Iterator<Item = &'a Result<Token, LexProblem>>,
+{
     let mut is_ok = true;
-    let mut end_size = None;
-    for (index, token) in tokens.iter().enumerate() {
-        is_ok = is_ok && process_lexeme(token);
-        if matches!(token.kind, Ok(TokenKind::Symbol(Symbol::EndProgram))) {
-            end_size = Some(index);
-            break;
+    let mut end_process = None;
+    for (index, token_entry) in token_entries.enumerate() {
+        is_ok = is_ok && process_lexeme(&token_entry);
+
+        if let Ok(token) = token_entry {
+            if matches!(token.kind, TokenKind::Symbol(Symbol::EndProgram)) {
+                end_process = Some(index);
+                break;
+            }
         }
     }
-    return (is_ok, end_size);
+    return (is_ok, end_process);
 }
 
-pub fn get_lexemes(path: &Path) -> Vec<Token> {
+pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
     let file = File::open(path).expect(&format!("Failed to open file, {}", path.to_string_lossy()));
     let reader = BufReader::new(file);
 
@@ -484,7 +513,7 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
     let mut line_number = 0;
     let mut start_char_position = 0;
     let mut buffer = String::from("");
-    let mut token_stream: Vec<Token> = Vec::new();
+    let mut token_stream: Vec<Result<Token, LexProblem>> = Vec::new();
     for line in reader.lines() {
         // poor performance for insanely long single line files
         // can choose other deliminators
@@ -609,7 +638,7 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
         start_char_position = 0;
     }
     // Need to fold for end of file
-    start_char_position = fold(
+    fold(
         &mut buffer,
         line_number,
         start_char_position,
@@ -620,23 +649,20 @@ pub fn get_lexemes(path: &Path) -> Vec<Token> {
 
     // check if file ends with $
     let mut ends_with_eop = false;
-    if let Some(last_token) = token_stream.last() {
-        match &last_token.kind {
-            Ok(token) => match token {
-                TokenKind::Symbol(Symbol::EndProgram) => ends_with_eop = true,
-                _ => {}
-            },
-            Err(_) => {}
+    if let Some(last_token_entry) = token_stream.last() {
+        if let Ok(token) = last_token_entry {
+            if matches!(token.kind, TokenKind::Symbol(Symbol::EndProgram)) {
+                ends_with_eop = true;
+            }
         }
     }
     if !ends_with_eop {
-        let eop_error_token = Token {
-            kind: Err(LexError::MissingEndProgram),
-            start_end_position: (start_char_position, start_char_position),
-            line: line_number,
-            representation: "$".to_string(),
-        };
-        token_stream.push(eop_error_token);
+        let eop_error_entry = LexProblem::LexWarning(LexWarning::MissingEndProgram);
+        token_stream.push(Err(eop_error_entry));
+    }
+    if in_comment {
+        let comment_error_entry = LexProblem::LexWarning(LexWarning::MissingCommentClose);
+        token_stream.push(Err(comment_error_entry))
     }
 
     return token_stream;
@@ -652,21 +678,20 @@ mod lex_tests {
 
     // helper function to get the token from a rep to
     //    make expected tests cases more readable
-    fn reps_to_tokens(reps: Vec<&str>) -> Vec<Token> {
-        let mut tokens = Vec::new();
+    fn reps_to_tokens(reps: Vec<&str>) -> Vec<Result<Token, LexProblem>> {
+        let mut token_entries = Vec::new();
         let mut in_string = false;
 
         for rep in reps {
             match get_token(rep, (0, 0), 0, in_string) {
-                Some(token) => tokens.push(token),
+                Some(token) => token_entries.push(Ok(token)),
                 None => {
-                    let unknown_err_token = Token {
-                        kind: Err(LexError::InvalidChar(rep.chars().next().unwrap() as char)),
-                        start_end_position: (0, 0),
+                    let lex_problem = LexProblem::LexError(LexError::InvalidChar(InvalidChar {
+                        character: rep.chars().next().unwrap(),
                         line: 0,
-                        representation: "".to_string(),
-                    };
-                    tokens.push(unknown_err_token);
+                        position: 0,
+                    }));
+                    token_entries.push(Err(lex_problem));
                 }
             }
             if rep == "\"" {
@@ -674,7 +699,20 @@ mod lex_tests {
             }
         }
 
-        return tokens;
+        let mut ends_with_eop = false;
+        if let Some(last_token_entry) = token_entries.last() {
+            if let Ok(token) = last_token_entry {
+                if matches!(token.kind, TokenKind::Symbol(Symbol::EndProgram)) {
+                    ends_with_eop = true;
+                }
+            }
+        }
+        if !ends_with_eop {
+            let eop_error_entry = LexProblem::LexWarning(LexWarning::MissingEndProgram);
+            token_entries.push(Err(eop_error_entry));
+        }
+
+        return token_entries;
     }
 
     // helper function to determine if token sequences are "like"
@@ -682,48 +720,51 @@ mod lex_tests {
     // Really just doesnt check positions bc I would be insane if I were
     //     to code that into a my test cases and I also it also
     //     helps for asserting likeness in the lex with/ without spaces
-    fn tokens_are_like(tokens1: &Vec<Token>, tokens2: &Vec<Token>) -> bool {
+    fn tokens_are_like(
+        token_entries1: &Vec<Result<Token, LexProblem>>,
+        tokens_entries2: &Vec<Result<Token, LexProblem>>,
+    ) -> bool {
         static DIF_DOWN: &str = "DIFF ↓ ↓ ↓ ↓ ↓ ↓ ";
         static DIF_UP: &str = "DIFF ↑ ↑ ↑ ↑ ↑ ↑ \n";
         let mut are_like_flag = true;
-        let zipped: Vec<_> = tokens1.iter().zip(tokens2.iter()).collect();
-        for (token1, token2) in zipped {
+        let zipped: Vec<_> = token_entries1.iter().zip(tokens_entries2.iter()).collect();
+        for (token_entry1, token_entry2) in zipped {
             // kinda hacky are to do this but its testing
             //     so who cares???
-            match &token1.kind {
-                Ok(token_kind1) => match &token2.kind {
-                    Ok(token_kind2) => {
-                        if !(get_token_verbose_name(&token_kind1)
-                            == get_token_verbose_name(&token_kind2))
+            match &token_entry1 {
+                Ok(token1) => match &token_entry2 {
+                    Ok(token2) => {
+                        if !(get_token_verbose_name(&token1.kind)
+                            == get_token_verbose_name(&token2.kind))
                         {
                             println!("{}", DIF_DOWN.red());
-                            process_lexeme(&token1);
-                            process_lexeme(&token2);
+                            process_lexeme(&token_entry1);
+                            process_lexeme(&token_entry2);
                             println!("{}", DIF_UP.red());
                             are_like_flag = false;
                         }
                     }
                     Err(_) => {
                         println!("{}", DIF_DOWN.red());
-                        process_lexeme(&token1);
-                        process_lexeme(&token2);
+                        process_lexeme(&token_entry1);
+                        process_lexeme(&token_entry2);
                         println!("{}", DIF_UP.red());
                         are_like_flag = false;
                     }
                 },
-                Err(err1) => match &token2.kind {
+                Err(err1) => match &token_entry2 {
                     Ok(_) => {
                         println!("{}", DIF_DOWN.red());
-                        process_lexeme(&token1);
-                        process_lexeme(&token2);
+                        process_lexeme(&token_entry1);
+                        process_lexeme(&token_entry2);
                         println!("{}", DIF_UP.red());
                         are_like_flag = false;
                     }
                     Err(err2) => {
-                        if !(get_error_verbose_name(&err1) == get_error_verbose_name(&err2)) {
+                        if !(get_error_text(&err1) == get_error_text(&err2)) {
                             println!("{}", DIF_DOWN.red());
-                            process_lexeme(&token1);
-                            process_lexeme(&token2);
+                            process_lexeme(&token_entry1);
+                            process_lexeme(&token_entry2);
                             println!("{}", DIF_UP.red());
                             are_like_flag = false;
                         }
@@ -731,8 +772,8 @@ mod lex_tests {
                 },
             };
         }
-        if tokens1.len() != tokens2.len() {
-            if tokens1.len() > tokens2.len() {
+        if token_entries1.len() != tokens_entries2.len() {
+            if token_entries1.len() > tokens_entries2.len() {
                 println!("{}", "FIRST TOKENS GENERATED MORE TOKENS".red());
             } else {
                 println!("{}", "SECOND TOKENS GENERATED MORE TOKENS".red());
@@ -756,14 +797,7 @@ mod lex_tests {
     fn three_symbols() {
         // file: =!=
         let expected_reps = vec!["=", "!="];
-        let missing_eop = Token {
-            kind: Err(LexError::MissingEndProgram),
-            start_end_position: (0, 0),
-            line: 0,
-            representation: "".to_string(),
-        };
-        let mut expected_tokens = reps_to_tokens(expected_reps);
-        expected_tokens.push(missing_eop);
+        let expected_tokens = reps_to_tokens(expected_reps);
         let path = Path::new("test_cases/ok/three-symbols.txt");
         let tokens = get_lexemes(path);
         assert!(tokens_are_like(&expected_tokens, &tokens))

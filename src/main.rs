@@ -4,14 +4,15 @@ use std::path::Path;
 mod lex;
 
 fn compile_steps(file: &Path) {
-    let tokens = lex::get_lexemes(file);
-    let mut next_program_start = 0;
-    while next_program_start != tokens.len() {
-        let (_has_errors, end_index) = lex::process_lexemes(&tokens);
+    let token_entries = lex::get_lexemes(file);
+    let mut amount_processed = 0;
+    while amount_processed < token_entries.len() {
+        let token_entry_slice = token_entries[amount_processed..].iter();
+        let (_has_errors, end_index) = lex::process_lexemes(token_entry_slice);
         // TODO IMPLEMENT MOVING ON TO REST ONLY IF PROGRAM DOES NOT HAVE ERRORS
         //    MAY NEED SOME CHANGES TO IMPLEMENT WARNING
         match end_index {
-            Some(end_index) => next_program_start = end_index + 1,
+            Some(end_index) => amount_processed += end_index + 1,
             None => break,
         }
     }
