@@ -674,6 +674,7 @@ mod lex_tests {
     // imports the lex mod as lex_tests is a sub mod
     use super::*;
     use colored::Colorize;
+    use std::mem::discriminant;
     use std::path::Path;
 
     // helper function to get the token from a rep to
@@ -716,7 +717,8 @@ mod lex_tests {
     }
 
     // helper function to determine if token sequences are "like"
-    //     another
+    //     another which means they produce more less the same tokens
+    //     ignoring things such as values and positions
     // Really just doesnt check positions bc I would be insane if I were
     //     to code that into a my test cases and I also it also
     //     helps for asserting likeness in the lex with/ without spaces
@@ -729,8 +731,6 @@ mod lex_tests {
         let mut are_like_flag = true;
         let zipped: Vec<_> = token_entries1.iter().zip(tokens_entries2.iter()).collect();
         for (token_entry1, token_entry2) in zipped {
-            // kinda hacky are to do this but its testing
-            //     so who cares???
             match &token_entry1 {
                 Ok(token1) => match &token_entry2 {
                     Ok(token2) => {
@@ -761,7 +761,7 @@ mod lex_tests {
                         are_like_flag = false;
                     }
                     Err(err2) => {
-                        if !(get_error_text(&err1) == get_error_text(&err2)) {
+                        if !(discriminant(err1) == discriminant(err2)) {
                             println!("{}", DIF_DOWN.red());
                             process_lexeme(&token_entry1);
                             process_lexeme(&token_entry2);
@@ -842,5 +842,36 @@ mod lex_tests {
         assert!(tokens_are_like(&expected_tokens, &tokens_with_spaces));
         assert!(tokens_are_like(&expected_tokens, &tokens_without_spaces));
         assert!(tokens_are_like(&expected_tokens, &tokens_with_spaces_no_comments));
+    }
+
+    #[test]
+    fn symbols_and_spaces() {
+        // file:
+        // = =
+        // =
+        // =
+        // This seems like odd behavior maybe change
+        //    but it is what I expected with how I dealt with
+        //    spaces
+        let expected_reps = vec!["==", "=", "="];
+        let expected_tokens = reps_to_tokens(expected_reps);
+        let path = Path::new("test_cases/ok/symbols_and_white_space.txt");
+        let tokens = get_lexemes(path);
+        assert!(tokens_are_like(&expected_tokens, &tokens));
+    }
+
+    #[test]
+    fn comment_between() {
+        // file:
+        // i/*COMMENT*/nt
+        // =/*COMMENT*/=
+        // "h/*O*/i"
+        let expected_reps = vec![
+            "i", "n", "t", "=", "=", "\"", "h", "/", "*", "O", "*", "/", "i", "\"",
+        ];
+        let expected_tokens = reps_to_tokens(expected_reps);
+        let path = Path::new("test_cases/ok/comment_between.txt");
+        let tokens = get_lexemes(path);
+        assert!(tokens_are_like(&expected_tokens, &tokens));
     }
 }
