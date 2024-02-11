@@ -622,7 +622,17 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
                     in_string = true;
                 }
                 buffer.push(c);
-            } else {
+            } else if allowed_but_skipped.contains(&c) && !in_string {
+                // fold here because spaces / tabs are symbols which should always
+                //    fold even if the buffer is a symbol of just one
+                start_char_position = fold(
+                    &mut buffer,
+                    line_number,
+                    start_char_position,
+                    &mut token_stream,
+                    in_string,
+                    false,
+                );
             }
         }
         // \n is a terminator so fold here
@@ -851,12 +861,7 @@ mod lex_tests {
         // !
         // =
         // =! =
-        // This seems like odd behavior maybe change
-        //    but it is what I expected with how I dealt with
-        //    spaces and it is sort of difficult bc it would
-        let expected_reps = vec!["!=", "!", "=", "=", "!="];
-        // IF I CHANGE IT the expected would be the following
-        // let expected_reps = vec!["!", "=", "!", "=", "=", "!", "="];
+        let expected_reps = vec!["!", "=", "!", "=", "=", "!", "="];
         let expected_tokens = reps_to_tokens(expected_reps);
         let path = Path::new("test_cases/lex-edge-cases/symbols_and_white_space.txt");
         let tokens = get_lexemes(path);
