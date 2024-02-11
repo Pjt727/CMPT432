@@ -788,7 +788,7 @@ mod lex_tests {
         // file: {}$
         let expected_reps = vec!["{", "}", "$"];
         let expected_tokens = reps_to_tokens(expected_reps);
-        let path = Path::new("test_cases/ok/hello-compiler.txt");
+        let path = Path::new("test_cases/general/hello-compiler.txt");
         let tokens = get_lexemes(path);
         assert!(tokens_are_like(&expected_tokens, &tokens))
     }
@@ -798,7 +798,7 @@ mod lex_tests {
         // file: =!=
         let expected_reps = vec!["=", "!="];
         let expected_tokens = reps_to_tokens(expected_reps);
-        let path = Path::new("test_cases/ok/three-symbols.txt");
+        let path = Path::new("test_cases/lex-edge-cases/three-symbols.txt");
         let tokens = get_lexemes(path);
         assert!(tokens_are_like(&expected_tokens, &tokens))
     }
@@ -833,9 +833,9 @@ mod lex_tests {
             "}", "$"
         ];
         let expected_tokens = reps_to_tokens(expected_reps);
-        let path_with_spaces_no_comments = Path::new("test_cases/ok/lex-with-spaces-no-comments.txt");
-        let path_with_spaces = Path::new("test_cases/ok/lex-with-spaces.txt");
-        let path_without_spaces = Path::new("test_cases/ok/lex-without-spaces.txt");
+        let path_with_spaces_no_comments = Path::new("test_cases/general/lex-with-spaces-no-comments.txt");
+        let path_with_spaces = Path::new("test_cases/general/lex-with-spaces.txt");
+        let path_without_spaces = Path::new("test_cases/general/lex-without-spaces.txt");
         let tokens_with_spaces_no_comments = get_lexemes(path_with_spaces);
         let tokens_with_spaces = get_lexemes(path_with_spaces_no_comments);
         let tokens_without_spaces = get_lexemes(path_without_spaces);
@@ -858,7 +858,7 @@ mod lex_tests {
         // IF I CHANGE IT the expected would be the following
         // let expected_reps = vec!["!", "=", "!", "=", "=", "!", "="];
         let expected_tokens = reps_to_tokens(expected_reps);
-        let path = Path::new("test_cases/ok/symbols_and_white_space.txt");
+        let path = Path::new("test_cases/lex-edge-cases/symbols_and_white_space.txt");
         let tokens = get_lexemes(path);
         assert!(tokens_are_like(&expected_tokens, &tokens));
     }
@@ -873,7 +873,33 @@ mod lex_tests {
             "i", "n", "t", "=", "=", "\"", "h", "/", "*", "O", "*", "/", "i", "\"",
         ];
         let expected_tokens = reps_to_tokens(expected_reps);
-        let path = Path::new("test_cases/ok/comment_between.txt");
+        let path = Path::new("test_cases/lex-edge-cases/comment_between.txt");
+        let tokens = get_lexemes(path);
+        assert!(tokens_are_like(&expected_tokens, &tokens));
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn multi_program() {
+        /*
+         * file:
+        {
+            int a
+            a = 5
+            print(a)
+        }$
+        {
+            int b
+            b = 2
+            print(b)
+        }$
+        */
+        let expected_reps = vec![
+            "{", "int", "a", "a", "=", "5", "print", "(", "a", ")", "}", "$",
+            "{", "int", "b", "b", "=", "2", "print", "(", "b", ")", "}", "$",
+        ];
+        let expected_tokens = reps_to_tokens(expected_reps);
+        let path = Path::new("test_cases/general/multi-program.txt");
         let tokens = get_lexemes(path);
         assert!(tokens_are_like(&expected_tokens, &tokens));
     }
