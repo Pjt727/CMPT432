@@ -79,7 +79,7 @@ pub enum LexProblem {
 }
 
 // depending on how I want to implement future tokens for the other steps
-//    I may put the token declartion in a different file
+//    I may put the token declaration in a different file
 pub struct Token {
     kind: TokenKind,
     start_end_position: (i32, i32),
@@ -316,7 +316,7 @@ fn fold(
             let token_end_position = token.start_end_position.1;
             let buffer_end_pos = token.representation.len();
             // to to create this variable so that I can send a reference
-            //     to the debug print and thne let the token_stream have
+            //     to the debug print and then let the token_stream have
             //     ownership
             let token_entry = Ok(token);
             // only for testing purposes do I want to process the token as it is made
@@ -568,13 +568,13 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
             let is_next_alpha = c >= 'a' && c <= 'z';
             // not that buffer_size is not always
             //   equal to its range in my interpretation of the language
-            //   "! =" should become the not eqaul token "!\n=" should become
+            //   "! =" should become the not equal token "!\n=" should become
             //   an error token token for ! and then and eqauls token
             //   new line white space is treated differently
             let buffer_size = buffer.len();
             // when compiled with optimization I am pretty sure that rust will be able
             //    to tell that when calculating these bools there are no side effects
-            //    and thus can hoist them so that the have the possibity of short circuiting
+            //    and thus can hoist them so that the have the possibility of short circuiting
             let switched_type = (is_next_alpha != is_last_alpha) && (buffer_size > 1);
             let execedes_symbol_size = (buffer_size as i32 >= SYMBOL_MAX_SIZE) && !is_last_alpha;
             if switched_type || execedes_symbol_size {
@@ -592,7 +592,7 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
                 is_last_alpha = is_next_alpha;
             }
 
-            // string processing happens before so it can have differnt rules
+            // string processing happens before so it can have different rules
             if !allowed_but_skipped.contains(&c) && !in_string {
                 if c == '\"' {
                     // I dont flip bools bc i have a discrete path for in_string
@@ -813,7 +813,7 @@ mod lex_tests {
         assert!(tokens_are_like(&expected_tokens, &tokens))
     }
 
-    // skip formatting to make expected more readible
+    // skip formatting to make expected more readable
     #[rustfmt::skip]
     #[test]
     fn lex_with_and_without_spaces() {
