@@ -55,7 +55,7 @@ fn get_token(
                 representation: buffer.to_string(),
             });
         }
-        if character == '\"' {
+        if character == symbol_mappings::QUOTATION_MARK.chars().next().unwrap() {
             return Some(Token {
                 kind: TokenKind::Symbol(Symbol::QuotatioinMark),
                 start_end_position,
@@ -90,103 +90,103 @@ fn get_token(
 
     // string matches for all non range words
     match buffer {
-        "boolean" => Some(Token {
+        keyword_mappings::BOOLEAN => Some(Token {
             kind: TokenKind::Keyword(Keyword::Boolean),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        "while" => Some(Token {
+        keyword_mappings::LOOP_ON_TRUE => Some(Token {
             kind: TokenKind::Keyword(Keyword::LoopOnTrue),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        "print" => Some(Token {
+        keyword_mappings::PRINT => Some(Token {
             kind: TokenKind::Keyword(Keyword::Print),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        "false" => Some(Token {
+        keyword_mappings::FALSE => Some(Token {
             kind: TokenKind::Keyword(Keyword::False),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        "true" => Some(Token {
+        keyword_mappings::TRUE => Some(Token {
             kind: TokenKind::Keyword(Keyword::True),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        "int" => Some(Token {
+        keyword_mappings::INT => Some(Token {
             kind: TokenKind::Keyword(Keyword::Int),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        "if" => Some(Token {
+        keyword_mappings::IF => Some(Token {
             kind: TokenKind::Keyword(Keyword::If),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        "==" => Some(Token {
+        symbol_mappings::CHECK_EQUALITY => Some(Token {
             kind: TokenKind::Symbol(Symbol::CheckEquality),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        "!=" => Some(Token {
+        symbol_mappings::CHECK_INEQUALITY => Some(Token {
             kind: TokenKind::Symbol(Symbol::CheckInequality),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        "$" => Some(Token {
+        symbol_mappings::END_PROGRAM => Some(Token {
             kind: TokenKind::Symbol(Symbol::EndProgram),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        "=" => Some(Token {
+        symbol_mappings::ASSIGNMENT => Some(Token {
             kind: TokenKind::Symbol(Symbol::Assignment),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        "+" => Some(Token {
+        symbol_mappings::ADDITION => Some(Token {
             kind: TokenKind::Symbol(Symbol::Addition),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        "\"" => Some(Token {
+        symbol_mappings::QUOTATION_MARK => Some(Token {
             kind: TokenKind::Symbol(Symbol::QuotatioinMark),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        "(" => Some(Token {
+        symbol_mappings::OPEN_PARENTHESIS => Some(Token {
             kind: TokenKind::Symbol(Symbol::OpenParenthesis),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        ")" => Some(Token {
+        symbol_mappings::CLOSE_PARENTHESIS => Some(Token {
             kind: TokenKind::Symbol(Symbol::CloseParenthesis),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        "{" => Some(Token {
+        symbol_mappings::OPEN_BLOCK => Some(Token {
             kind: TokenKind::Symbol(Symbol::OpenBlock),
             start_end_position,
             line,
             representation: buffer.to_string(),
         }),
-        "}" => Some(Token {
+        symbol_mappings::CLOSE_BLOCK => Some(Token {
             kind: TokenKind::Symbol(Symbol::CloseBlock),
             start_end_position,
             line,

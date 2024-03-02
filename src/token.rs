@@ -7,6 +7,15 @@ pub enum Keyword {
     False,
     Print,
 }
+pub mod keyword_mappings {
+    pub const LOOP_ON_TRUE: &str = "while";
+    pub const IF: &str = "if";
+    pub const BOOLEAN: &str = "boolean";
+    pub const INT: &str = "int";
+    pub const TRUE: &str = "true";
+    pub const FALSE: &str = "false";
+    pub const PRINT: &str = "print";
+}
 
 // will read from these later
 #[allow(dead_code)]
@@ -25,6 +34,19 @@ pub enum Symbol {
     CheckInequality,
     Addition,
     EndProgram,
+}
+
+pub mod symbol_mappings {
+    pub const OPEN_BLOCK: &str = "{";
+    pub const CLOSE_BLOCK: &str = "}";
+    pub const OPEN_PARENTHESIS: &str = "(";
+    pub const CLOSE_PARENTHESIS: &str = ")";
+    pub const QUOTATION_MARK: &str = "\"";
+    pub const ASSIGNMENT: &str = "=";
+    pub const CHECK_EQUALITY: &str = "==";
+    pub const CHECK_INEQUALITY: &str = "!=";
+    pub const ADDITION: &str = "+";
+    pub const END_PROGRAM: &str = "$";
 }
 
 // will read from these later
