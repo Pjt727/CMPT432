@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 mod lex;
 use colored::Colorize;
+mod token;
 
 fn compile_steps(file: &Path) {
     let token_entries = lex::get_lexemes(file);
