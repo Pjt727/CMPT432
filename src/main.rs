@@ -62,14 +62,6 @@ fn main() {
                 Err(_) => continue,
             };
             let file_path = file.path();
-            match file_path.extension() {
-                Some(extension) => {
-                    if extension != "txt" {
-                        continue;
-                    }
-                }
-                None => continue,
-            }
             println!(
                 "{} for {}",
                 "Starting compile steps".magenta(),
@@ -78,10 +70,7 @@ fn main() {
             compile_steps(file_path.as_path());
             println!("{}", "Finished compile steps\n".magenta())
         }
-    } else if let Some(extension) = first_path.extension() {
-        if extension != "txt" {
-            panic!("That is not a valid filetype to compile!")
-        }
+    } else {
         println!(
             "{} for {}",
             "Starting compile steps".magenta(),

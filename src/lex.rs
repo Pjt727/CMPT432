@@ -741,7 +741,7 @@ mod lex_tests {
         // file: {}$
         let expected_reps = vec!["{", "}", "$"];
         let expected_tokens = reps_to_tokens(expected_reps);
-        let path = Path::new("test_cases/general/hello-compiler.txt");
+        let path = Path::new("test_cases/general/hello-compiler");
         let tokens = get_lexemes(path);
         assert!(tokens_are_like(&expected_tokens, &tokens))
     }
@@ -751,7 +751,7 @@ mod lex_tests {
         // file: =!=
         let expected_reps = vec!["=", "!="];
         let expected_tokens = reps_to_tokens(expected_reps);
-        let path = Path::new("test_cases/lex-edge-cases/three-symbols.txt");
+        let path = Path::new("test_cases/lex-edge-cases/three-symbols");
         let tokens = get_lexemes(path);
         assert!(tokens_are_like(&expected_tokens, &tokens))
     }
@@ -786,9 +786,9 @@ mod lex_tests {
             "}", "$"
         ];
         let expected_tokens = reps_to_tokens(expected_reps);
-        let path_with_spaces_no_comments = Path::new("test_cases/general/lex-with-spaces-no-comments.txt");
-        let path_with_spaces = Path::new("test_cases/general/lex-with-spaces.txt");
-        let path_without_spaces = Path::new("test_cases/general/lex-without-spaces.txt");
+        let path_with_spaces_no_comments = Path::new("test_cases/general/lex-with-spaces-no-comments");
+        let path_with_spaces = Path::new("test_cases/general/lex-with-spaces");
+        let path_without_spaces = Path::new("test_cases/general/lex-without-spaces");
         let tokens_with_spaces_no_comments = get_lexemes(path_with_spaces);
         let tokens_with_spaces = get_lexemes(path_with_spaces_no_comments);
         let tokens_without_spaces = get_lexemes(path_without_spaces);
@@ -806,7 +806,7 @@ mod lex_tests {
         // =! =
         let expected_reps = vec!["!", "=", "!", "=", "=", "!", "="];
         let expected_tokens = reps_to_tokens(expected_reps);
-        let path = Path::new("test_cases/lex-edge-cases/symbols_and_white_space.txt");
+        let path = Path::new("test_cases/lex-edge-cases/symbols_and_white_space");
         let tokens = get_lexemes(path);
         assert!(tokens_are_like(&expected_tokens, &tokens));
     }
@@ -821,7 +821,7 @@ mod lex_tests {
             "i", "n", "t", "=", "=", "\"", "h", "/", "*", "O", "*", "/", "i", "\"",
         ];
         let expected_tokens = reps_to_tokens(expected_reps);
-        let path = Path::new("test_cases/lex-edge-cases/comment_between.txt");
+        let path = Path::new("test_cases/lex-edge-cases/comment_between");
         let tokens = get_lexemes(path);
         assert!(tokens_are_like(&expected_tokens, &tokens));
     }
@@ -847,7 +847,7 @@ mod lex_tests {
             "{", "int", "b", "b", "=", "2", "print", "(", "b", ")", "}", "$",
         ];
         let expected_tokens = reps_to_tokens(expected_reps);
-        let path = Path::new("test_cases/general/multi-program.txt");
+        let path = Path::new("test_cases/general/multi-program");
         let tokens = get_lexemes(path);
         assert!(tokens_are_like(&expected_tokens, &tokens));
     }
