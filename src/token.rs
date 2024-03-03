@@ -7,6 +7,7 @@ pub enum Keyword {
     False,
     Print,
 }
+
 pub mod keyword_mappings {
     pub const LOOP_ON_TRUE: &str = "while";
     pub const IF: &str = "if";
@@ -69,10 +70,6 @@ pub enum TokenKind {
     Char(Char),
 }
 
-
-
-// depending on how I want to implement future tokens for the other steps
-//    I may put the token declaration in a different file
 pub struct Token {
     pub kind: TokenKind,
     pub start_end_position: (i32, i32),
