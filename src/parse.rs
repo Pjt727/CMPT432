@@ -5,8 +5,11 @@ use crate::token::*;
 type Node<'a> = Rc<RefCell<NodeEnum<'a>>>;
 
 struct Production<'a> {
+    // chosen as string instead of a enum because
+    // every produciton rule is only added in one place
     rule: String,
     children: Vec<Node<'a>>,
+    parent: Option<Node<'a>>,
 }
 
 struct ParseError<'a> {
@@ -40,6 +43,9 @@ where
 {
     root: Result<Node<'a>, ParseError<'a>>,
     tokens: T,
+
+    // this is only ever supposed to be a production
+    // but it would be difficult to change types becuase nodes reference counted
     last_node: Weak<RefCell<NodeEnum<'a>>>,
 }
 
@@ -51,6 +57,7 @@ where
         let root_node = Rc::new(RefCell::new(NodeEnum::Production(Production {
             rule: "program".to_string(),
             children: vec![],
+            parent: None,
         })));
         let mut cst = ConcreteSyntaxTree {
             root: Ok(root_node.clone()),
@@ -61,7 +68,11 @@ where
         return cst;
     }
 
-    fn add_prodction(&mut self, production_name: String) {}
+    fn add_prodction(&mut self, production_name: String) {
+        let last_node_weak = &self.last_node;
+        let last_node = last_node_weak.upgrade().unwrap();
+        let mut last_node_strong = last_node.borrow_mut();
+    }
     // always consumes token
     fn match_kind(&mut self, kinds: Vec<TokenKind>) {
         let last_node_weak = &self.last_node;
@@ -81,7 +92,7 @@ where
                 return;
             }
 
-            // maybe change this panic to a error message
+            // maybe change this panic to an error message
             None => panic!("Ran out of tokens"),
         }
     }
