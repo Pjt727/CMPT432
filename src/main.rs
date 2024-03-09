@@ -55,6 +55,7 @@ fn compile_steps(file: &Path) {
 
         let cst = parse::ConcreteSyntaxTree::new(tokens.iter());
         cst.show_parse_steps();
+        cst.show_cst();
         match end_index {
             Some(end_index) => amount_processed += end_index + 1,
             None => break,

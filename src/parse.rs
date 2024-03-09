@@ -60,13 +60,13 @@ where
             Err(_) => true,
         }
     }
-    pub fn show_parse_steps(self) {
+    pub fn show_parse_steps(&self) {
         static INFO_TEXT: &str = "DEBUG INFO parse:";
         static ERROR_TEXT: &str = "DEBUG ERROR parse:";
-        for production in self.productions {
+        for production in &self.productions {
             println!("{} - {}", INFO_TEXT.cyan(), production,);
         }
-        if let Err(parse_err) = self.root {
+        if let Err(parse_err) = &self.root {
             let token_names: Vec<&str> = parse_err
                 .expected_kinds
                 .iter()
@@ -82,10 +82,11 @@ where
                     position_rep = format!("{}-{}", start_pos, end_pos,)
                 }
                 println!(
-                    "{} - Expected [ {} ] found [ {} ] at {}:{}",
+                    "{} - Expected [ {} ] found {} [ {} ] at {}:{}",
                     ERROR_TEXT.red(),
                     token_names.join(", "),
                     get_token_verbose_name(&token.kind),
+                    token.representation,
                     token.line,
                     position_rep
                 )
@@ -99,6 +100,36 @@ where
         }
     }
 
+    pub fn show_cst(&self) {
+        static ERROR_TEXT: &str = "DEBUG ERROR parse:";
+        let root = match &self.root {
+            Ok(root) => root,
+            Err(_) => {
+                println!("{} - Parse Error Skipping CST", ERROR_TEXT);
+                return;
+            }
+        };
+        let root_mut = root.borrow_mut();
+        let node_enum = &root_mut.children;
+        println!("<{}>", root_mut.rule);
+        self.traverse_cst(node_enum, 1);
+    }
+
+    fn traverse_cst(&self, children: &Vec<NodeEnum<'a>>, depth: usize) {
+        let indent = "-".repeat(depth);
+        for child in children {
+            match child {
+                NodeEnum::Production(p) => {
+                    let p_mut = p.borrow_mut();
+                    println!("{}<{}>", indent, p_mut.rule);
+                    self.traverse_cst(&p_mut.children, depth + 1);
+                }
+                NodeEnum::Terminal(t) => {
+                    println!("{}[{}]", indent, t.representation)
+                }
+            }
+        }
+    }
     // moves the last_node to the parrent of the current node
     fn up_root(&mut self) {
         if let Err(_) = self.root {
@@ -115,15 +146,6 @@ where
 
     // has the side affect of moving the last_node to the added production
     fn add_production(&mut self, production_name: String) {
-        dbg!(&production_name);
-        match self.tokens.peek() {
-            Some(t) => {
-                println!("{}", get_token_verbose_name(&t.kind));
-            }
-            None => {
-                println!("No Token")
-            }
-        };
         if let Err(_) = self.root {
             return;
         }
@@ -143,7 +165,14 @@ where
 
     fn add_error(&mut self, error: ParseError<'a>) {
         match self.root {
-            Ok(_) => self.root = Err(error),
+            Ok(_) => {
+                // exhust the tooken iter can
+                //    have a different implementation
+                //    for error recovery
+                let _rest_of_tokens: Vec<&Token> = self.tokens.by_ref().collect();
+                self.root = Err(error);
+            }
+
             // do nothing if there is already an error
             //    can adapt this function if meaningful errors can be gained
             //    after the first one
@@ -165,7 +194,6 @@ where
                         return;
                     }
                 }
-                // will change to error later
                 self.add_error(ParseError {
                     token_found: Some(t),
                     expected_kinds: kinds,
@@ -173,7 +201,10 @@ where
             }
 
             // maybe change this panic to an error message
-            None => panic!("Ran out of tokens"),
+            None => self.add_error(ParseError {
+                token_found: None,
+                expected_kinds: kinds,
+            }),
         }
     }
 
@@ -202,7 +233,7 @@ where
         self.add_production("Statement List".to_string());
         let expected_kinds = vec![
             TokenKind::Keyword(Keyword::Print),
-            TokenKind::Char(Char { letter: 'X' }),
+            TokenKind::Id(Id { name: 'X' }),
             TokenKind::Keyword(Keyword::Int),
             TokenKind::Keyword(Keyword::Boolean),
             TokenKind::Keyword(Keyword::String),
@@ -233,7 +264,7 @@ where
         self.add_production("Statement".to_string());
         let expected_kinds = vec![
             TokenKind::Keyword(Keyword::Print),
-            TokenKind::Char(Char { letter: 'X' }),
+            TokenKind::Id(Id { name: 'X' }),
             TokenKind::Keyword(Keyword::Int),
             TokenKind::Keyword(Keyword::Boolean),
             TokenKind::Keyword(Keyword::String),
@@ -253,7 +284,7 @@ where
         if next_token.is_like(TokenKind::Keyword(Keyword::Print)) {
             self.do_print_statement();
             // the
-        } else if next_token.is_like(TokenKind::Char(Char { letter: 'X' })) {
+        } else if next_token.is_like(TokenKind::Id(Id { name: 'X' })) {
             self.do_assignment_statement();
         } else if next_token.is_like(TokenKind::Keyword(Keyword::Int))
             || next_token.is_like(TokenKind::Keyword(Keyword::Boolean))
@@ -278,7 +309,7 @@ where
         self.add_production("Print Statement".to_string());
         self.match_kind(vec![TokenKind::Keyword(Keyword::Print)]);
         self.match_kind(vec![TokenKind::Symbol(Symbol::OpenParenthesis)]);
-
+        self.do_expr();
         self.match_kind(vec![TokenKind::Symbol(Symbol::CloseParenthesis)]);
         self.up_root();
     }
@@ -300,6 +331,7 @@ where
 
     fn do_while_statement(&mut self) {
         self.add_production("While Statement".to_string());
+        self.match_kind(vec![TokenKind::Keyword(Keyword::LoopOnTrue)]);
         self.do_boolean_expr();
         self.do_block();
         self.up_root();
@@ -307,6 +339,7 @@ where
 
     fn do_if_statement(&mut self) {
         self.add_production("If Statement".to_string());
+        self.match_kind(vec![TokenKind::Keyword(Keyword::If)]);
         self.do_boolean_expr();
         self.do_block();
         self.up_root();
@@ -320,7 +353,7 @@ where
             TokenKind::Symbol(Symbol::OpenParenthesis),
             TokenKind::Keyword(Keyword::True),
             TokenKind::Keyword(Keyword::False),
-            TokenKind::Char(Char { letter: 'X' }),
+            TokenKind::Id(Id { name: 'X' }),
         ];
 
         let next_token = match self.tokens.peek() {
@@ -343,7 +376,7 @@ where
             || next_token.is_like(TokenKind::Keyword(Keyword::False))
         {
             self.do_boolean_expr();
-        } else if next_token.is_like(TokenKind::Char(Char { letter: 'X' })) {
+        } else if next_token.is_like(TokenKind::Id(Id { name: 'X' })) {
             self.do_id();
         } else {
             let cloned_reference = next_token.clone();
@@ -365,7 +398,7 @@ where
             TokenKind::Symbol(Symbol::CloseParenthesis),
             // and then a lot in case that it was id = expr
             TokenKind::Keyword(Keyword::Print),
-            TokenKind::Char(Char { letter: 'X' }),
+            TokenKind::Id(Id { name: 'X' }),
             TokenKind::Keyword(Keyword::Int),
             TokenKind::Keyword(Keyword::Boolean),
             TokenKind::Keyword(Keyword::String),
@@ -451,7 +484,7 @@ where
 
     fn do_id(&mut self) {
         self.add_production("Id".to_string());
-        self.match_kind(vec![TokenKind::Char(Char { letter: 'X' })]);
+        self.match_kind(vec![TokenKind::Id(Id { name: 'X' })]);
         self.up_root();
     }
 
@@ -507,7 +540,7 @@ where
         };
 
         if next_token.is_like(TokenKind::Char(Char { letter: 'X' })) {
-            self.match_kind(vec![TokenKind::Char(Char { letter: 'X' })]);
+            self.do_char();
             self.do_char_list();
         } else if !next_token.is_like(TokenKind::Symbol(Symbol::QuotatioinMark)) {
             let cloned_reference = next_token.clone();
@@ -517,6 +550,12 @@ where
             });
             return;
         }
+        self.up_root();
+    }
+
+    fn do_char(&mut self) {
+        self.add_production("Char".to_string());
+        self.match_kind(vec![TokenKind::Char(Char { letter: 'X' })]);
         self.up_root();
     }
 }
