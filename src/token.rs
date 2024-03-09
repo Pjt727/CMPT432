@@ -55,6 +55,39 @@ pub mod symbol_mappings {
     pub const ADDITION: &str = "+";
     pub const END_PROGRAM: &str = "$";
 }
+//
+// Gets the class name of variable
+// Can change toggle to only include last n classes
+//    or to match enums if it does not work well
+pub fn get_token_verbose_name(token: &TokenKind) -> &str {
+    match token {
+        TokenKind::Keyword(keyword) => match keyword {
+            Keyword::LoopOnTrue => "LOOP_ON_TRUE",
+            Keyword::If => "IF_TRUE_DO",
+            Keyword::String => "STRING_TYPE",
+            Keyword::Boolean => "TYPE_BOOL",
+            Keyword::Int => "INT_TYPE",
+            Keyword::True => "LITERAL_TRUE",
+            Keyword::False => "LITERAL_FALSE",
+            Keyword::Print => "PRINT",
+        },
+        TokenKind::Id(_) => "IDENTIFIER",
+        TokenKind::Symbol(symbol) => match symbol {
+            Symbol::OpenBlock => "BLOCK_OPEN",
+            Symbol::CloseBlock => "BLOCK_CLOSE",
+            Symbol::OpenParenthesis => "PARENTHESIS_OPEN",
+            Symbol::CloseParenthesis => "PARENTHESIS_CLOSE",
+            Symbol::QuotatioinMark => "QUOTATION_MARK",
+            Symbol::Assignment => "ASSIGNMENT",
+            Symbol::CheckEquality => "CHECK_EQUALITY",
+            Symbol::CheckInequality => "CHECK_INEQUALITY",
+            Symbol::Addition => "OPERATOR_ADDITION",
+            Symbol::EndProgram => "END_OF_PROGRAM",
+        },
+        TokenKind::Digit(_) => "LITERAL_DIGIT",
+        TokenKind::Char(_) => "LITERAL_CHAR",
+    }
+}
 
 // will read from these later
 #[allow(dead_code)]

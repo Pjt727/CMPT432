@@ -1,5 +1,7 @@
 #![allow(dead_code)]
+#![allow(suspicious_double_ref_op)]
 use crate::token::*;
+use colored::Colorize;
 use std::{cell::RefCell, iter::Peekable, rc::Rc, rc::Weak};
 
 struct Production<'a> {
@@ -29,6 +31,7 @@ where
     // this is only ever supposed to be a production
     // but it would be difficult to change types becuase nodes reference counted
     last_production: Weak<RefCell<Production<'a>>>,
+    productions: Vec<String>,
 }
 
 impl<'a, T> ConcreteSyntaxTree<'a, T>
@@ -37,7 +40,7 @@ where
 {
     pub fn new(tokens: T) -> Self {
         let root_node = Rc::new(RefCell::new(Production {
-            rule: "program".to_string(),
+            rule: "Program".to_string(),
             children: vec![],
             parent: None,
         }));
@@ -45,9 +48,49 @@ where
             root: Ok(root_node.clone()),
             tokens: tokens.peekable(),
             last_production: Rc::downgrade(&root_node),
+            productions: vec!["Program".to_string()],
         };
         cst.do_program();
         return cst;
+    }
+
+    fn show_parse_steps(self) {
+        static INFO_TEXT: &str = "DEBUG INFO parse:";
+        static ERROR_TEXT: &str = "DEBUG ERROR parse:";
+        for production in self.productions {
+            println!("{} - {}", INFO_TEXT.cyan(), production,);
+        }
+        if let Err(parse_err) = self.root {
+            let token_names: Vec<&str> = parse_err
+                .expected_kinds
+                .iter()
+                .map(|kind| get_token_verbose_name(kind))
+                .collect();
+
+            if let Some(token) = parse_err.token_found {
+                let (start_pos, end_pos) = token.start_end_position;
+                let position_rep;
+                if start_pos == end_pos - 1 {
+                    position_rep = format!("{}", start_pos);
+                } else {
+                    position_rep = format!("{}-{}", start_pos, end_pos,)
+                }
+                println!(
+                    "{} - Expected [ {} ] found [ {} ] at {}:{}",
+                    ERROR_TEXT.red(),
+                    token_names.join(", "),
+                    get_token_verbose_name(&token.kind),
+                    token.line,
+                    position_rep
+                )
+            } else {
+                println!(
+                    "{} - Expected [ {} ] found nothing",
+                    ERROR_TEXT.red(),
+                    token_names.join(", ")
+                )
+            }
+        }
     }
 
     // moves the last_node to the parrent of the current node
@@ -63,6 +106,7 @@ where
 
     // has the side affect of moving the last_node to the added production
     fn add_production(&mut self, production_name: String) {
+        self.productions.push(production_name.clone());
         let last_production_weak = &self.last_production;
         let last_production_strong = last_production_weak.upgrade().unwrap();
         let mut last_node = last_production_strong.borrow_mut();
@@ -74,6 +118,16 @@ where
         self.last_production = Rc::downgrade(&new_production);
         let node = NodeEnum::Production(new_production);
         last_node.children.push(node);
+    }
+
+    fn add_error(&mut self, error: ParseError<'a>) {
+        match self.root {
+            Ok(_) => self.root = Err(error),
+            // do nothing if there is already an error
+            //    can adapt this function if meaningful errors can be gained
+            //    after the first one
+            Err(_) => {}
+        }
     }
 
     // always consumes token
@@ -106,6 +160,9 @@ where
     fn do_program(&mut self) {
         //  rule of program already done during init
         self.do_block();
+        // the program ensures that there is only one end program
+        //    in the token slice so there is not need to esnure that
+        //    the terminal (tokens) have been exhuasted here
         self.match_kind(vec![TokenKind::Symbol(Symbol::EndProgram)]);
     }
 
@@ -131,7 +188,7 @@ where
         let next_token = match self.tokens.peek() {
             Some(t) => t,
             None => {
-                self.root = Err(ParseError {
+                self.add_error(ParseError {
                     token_found: None,
                     expected_kinds,
                 });
@@ -162,7 +219,7 @@ where
         let next_token = match self.tokens.peek() {
             Some(t) => t,
             None => {
-                self.root = Err(ParseError {
+                self.add_error(ParseError {
                     token_found: None,
                     expected_kinds,
                 });
@@ -184,8 +241,9 @@ where
         } else if next_token.is_like(TokenKind::Keyword(Keyword::If)) {
             self.do_if_statement();
         } else {
-            self.root = Err(ParseError {
-                token_found: Some(next_token),
+            let cloned_reference = next_token.clone();
+            self.add_error(ParseError {
+                token_found: Some(cloned_reference),
                 expected_kinds,
             });
         }
@@ -244,7 +302,7 @@ where
         let next_token = match self.tokens.peek() {
             Some(t) => t,
             None => {
-                self.root = Err(ParseError {
+                self.add_error(ParseError {
                     token_found: None,
                     expected_kinds,
                 });
@@ -264,8 +322,9 @@ where
         } else if next_token.is_like(TokenKind::Char(Char { letter: 'X' })) {
             self.do_id();
         } else {
-            self.root = Err(ParseError {
-                token_found: None,
+            let cloned_reference = next_token.clone();
+            self.add_error(ParseError {
+                token_found: Some(cloned_reference),
                 expected_kinds,
             });
             return;
@@ -292,7 +351,7 @@ where
         let next_token = match self.tokens.peek() {
             Some(t) => t,
             None => {
-                self.root = Err(ParseError {
+                self.add_error(ParseError {
                     token_found: None,
                     expected_kinds,
                 });
@@ -313,8 +372,9 @@ where
                 }
             }
             if no_matches {
-                self.root = Err(ParseError {
-                    token_found: None,
+                let cloned_reference = next_token.clone();
+                self.add_error(ParseError {
+                    token_found: Some(cloned_reference),
                     expected_kinds,
                 });
                 return;
@@ -342,7 +402,7 @@ where
         let next_token = match self.tokens.peek() {
             Some(t) => t,
             None => {
-                self.root = Err(ParseError {
+                self.add_error(ParseError {
                     token_found: None,
                     expected_kinds,
                 });
@@ -414,7 +474,7 @@ where
         let next_token = match self.tokens.peek() {
             Some(t) => t,
             None => {
-                self.root = Err(ParseError {
+                self.add_error(ParseError {
                     token_found: None,
                     expected_kinds,
                 });
@@ -426,8 +486,9 @@ where
             self.match_kind(vec![TokenKind::Char(Char { letter: 'X' })]);
             self.do_char_list();
         } else if !next_token.is_like(TokenKind::Symbol(Symbol::QuotatioinMark)) {
-            self.root = Err(ParseError {
-                token_found: None,
+            let cloned_reference = next_token.clone();
+            self.add_error(ParseError {
+                token_found: Some(cloned_reference),
                 expected_kinds,
             });
             return;
@@ -440,7 +501,7 @@ where
 mod parse_tests {
     use super::*;
     use crate::lex::*;
-    use std::{borrow::BorrowMut, path::Path};
+    use std::path::Path;
 
     #[test]
     fn hello_parse() {
@@ -459,5 +520,6 @@ mod parse_tests {
         }
 
         let cst = ConcreteSyntaxTree::new(tokens.iter());
+        cst.show_parse_steps();
     }
 }
