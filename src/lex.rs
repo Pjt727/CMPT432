@@ -440,6 +440,7 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
         line_number += 1;
         let line = line.expect("Unexpected File Reading Error");
         for c in line.chars() {
+            dbg!(c, in_comment);
             // first check for comments
             // put here here bc comments dont generate tokens
             if in_comment {
@@ -553,6 +554,22 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
         }
         // \n is a terminator so fold here
         // note this does not reset strings values so multi line strings should be without err
+
+        if !in_comment {
+            fold(
+                &mut buffer,
+                line_number,
+                start_char_position,
+                &mut token_stream,
+                in_string,
+                false,
+            );
+        }
+        start_char_position = 0;
+    }
+
+    // Need to fold for end of file
+    if !in_comment {
         fold(
             &mut buffer,
             line_number,
@@ -561,18 +578,7 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
             in_string,
             false,
         );
-        start_char_position = 0;
     }
-    // Need to fold for end of file
-    fold(
-        &mut buffer,
-        line_number,
-        start_char_position,
-        &mut token_stream,
-        in_string,
-        false,
-    );
-
     // check if file ends with $
     let mut ends_with_eop = false;
     if let Some(last_token_entry) = token_stream.last() {

@@ -27,6 +27,42 @@ fn compile_steps(file: &Path) {
                 "Successfully Lexed".magenta(),
                 errors_and_warnings.1
             );
+            println!();
+
+            // move on to parse
+            let mut tokens: Vec<token::Token> = vec![];
+            let safe_end_index = end_index.unwrap_or(token_entries.len());
+            for lexeme in token_entries[amount_processed..safe_end_index + 1].iter() {
+                match lexeme {
+                    Ok(token) => tokens.push(token.clone()),
+                    Err(lex_problem) => match lex_problem {
+                        lex::LexProblem::LexError(_) => panic!("Error during lex!!"),
+                        lex::LexProblem::LexWarning(w) => {
+                            // need to add an endprogram if that error exists
+                            match w {
+                                lex::LexWarning::MissingEndProgram => tokens.push(token::Token {
+                                    kind: token::TokenKind::Symbol(token::Symbol::EndProgram),
+                                    // -1 to demonstrate that it did not exist in the program
+                                    start_end_position: (-1, -1),
+                                    line: -1,
+                                    representation: "$".to_string(),
+                                }),
+                                lex::LexWarning::MissingCommentClose => {}
+                            }
+                        }
+                    },
+                }
+            }
+            println!(
+                "{} for program {}",
+                "Starting Parse".magenta(),
+                programs_processed
+            );
+
+            let cst = parse::ConcreteSyntaxTree::new(tokens.iter());
+            cst.show_parse_steps();
+            println!();
+            cst.show_cst();
         } else {
             println!(
                 "{} with {} Fatal Error(s) and {} Warning(s)",
@@ -35,27 +71,7 @@ fn compile_steps(file: &Path) {
                 errors_and_warnings.1,
             );
         }
-        let mut tokens: Vec<token::Token> = vec![];
-        let safe_end_index = end_index.unwrap_or(token_entries.len());
-        for lexeme in token_entries[amount_processed..safe_end_index + 1].iter() {
-            match lexeme {
-                Ok(token) => tokens.push(token.clone()),
-                Err(lex_problem) => match lex_problem {
-                    lex::LexProblem::LexError(_) => panic!("Error during lex!!"),
-                    lex::LexProblem::LexWarning(_) => continue,
-                },
-            }
-        }
 
-        println!(
-            "{} for program {}",
-            "Starting Parse".magenta(),
-            programs_processed
-        );
-
-        let cst = parse::ConcreteSyntaxTree::new(tokens.iter());
-        cst.show_parse_steps();
-        cst.show_cst();
         match end_index {
             Some(end_index) => amount_processed += end_index + 1,
             None => break,

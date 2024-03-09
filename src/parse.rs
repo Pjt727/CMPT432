@@ -102,10 +102,14 @@ where
 
     pub fn show_cst(&self) {
         static ERROR_TEXT: &str = "DEBUG ERROR parse:";
+        static INFO_TEXT: &str = "Sucessfully parsed";
         let root = match &self.root {
-            Ok(root) => root,
+            Ok(root) => {
+                println!("{} - Showing CST", INFO_TEXT.magenta());
+                root
+            }
             Err(_) => {
-                println!("{} - Parse Error Skipping CST", ERROR_TEXT);
+                println!("{} - Parse Error Skipping CST", ERROR_TEXT.red());
                 return;
             }
         };
@@ -121,11 +125,11 @@ where
             match child {
                 NodeEnum::Production(p) => {
                     let p_mut = p.borrow_mut();
-                    println!("{}<{}>", indent, p_mut.rule);
+                    println!("{}<{}>", indent.blue(), p_mut.rule);
                     self.traverse_cst(&p_mut.children, depth + 1);
                 }
                 NodeEnum::Terminal(t) => {
-                    println!("{}[{}]", indent, t.representation)
+                    println!("{}[{}]", indent.blue(), t.representation)
                 }
             }
         }
@@ -560,6 +564,8 @@ where
     }
 }
 
+// I do not really have a programatic way to test parse test unless
+//    I were to hardcode the cst tree and like... no
 #[cfg(test)]
 mod parse_tests {
     use super::*;
