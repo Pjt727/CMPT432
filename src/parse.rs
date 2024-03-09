@@ -20,7 +20,7 @@ enum NodeEnum<'a> {
     Terminal(&'a Token),
 }
 
-struct ConcreteSyntaxTree<'a, T>
+pub struct ConcreteSyntaxTree<'a, T>
 where
     T: Iterator<Item = &'a Token>,
 {
@@ -436,9 +436,28 @@ where
     }
 }
 
-pub fn parse<'a, T>(mut tokens: T)
-where
-    T: Iterator<Item = &'a Token>,
-{
-    let cst = ConcreteSyntaxTree::new(tokens);
+#[cfg(test)]
+mod parse_tests {
+    use super::*;
+    use crate::lex::*;
+    use std::{borrow::BorrowMut, path::Path};
+
+    #[test]
+    fn hello_parse() {
+        // file: {}$
+        let path = Path::new("test_cases/general/hello-compiler");
+        let lexemes = get_lexemes(path);
+        let mut tokens = vec![];
+        for lexeme in lexemes {
+            match lexeme {
+                Ok(token) => tokens.push(token),
+                Err(lex_problem) => match lex_problem {
+                    LexProblem::LexError(_) => panic!("Error during lex!!"),
+                    LexProblem::LexWarning(_) => continue,
+                },
+            }
+        }
+
+        let cst = ConcreteSyntaxTree::new(tokens.iter());
+    }
 }
