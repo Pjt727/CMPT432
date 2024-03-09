@@ -1,7 +1,10 @@
+use std::mem::discriminant;
+
 pub enum Keyword {
     LoopOnTrue,
     If,
     Boolean,
+    String,
     Int,
     True,
     False,
@@ -13,6 +16,7 @@ pub mod keyword_mappings {
     pub const IF: &str = "if";
     pub const BOOLEAN: &str = "boolean";
     pub const INT: &str = "int";
+    pub const STRING: &str = "string";
     pub const TRUE: &str = "true";
     pub const FALSE: &str = "false";
     pub const PRINT: &str = "print";
@@ -76,4 +80,20 @@ pub struct Token {
     // Tokens can only be 1 line as \n acts as fold for everything
     pub line: i32,
     pub representation: String,
+}
+
+impl Token {
+    // matching enum variants correctly with depth when needed
+    pub fn is_like(&self, kind: TokenKind) -> bool {
+        match (&self.kind, kind) {
+            (TokenKind::Keyword(k1), TokenKind::Keyword(k2)) => {
+                discriminant(k1) == discriminant(&k2)
+            }
+            (TokenKind::Id(_), TokenKind::Id(_)) => true,
+            (TokenKind::Symbol(k1), TokenKind::Symbol(k2)) => discriminant(k1) == discriminant(&k2),
+            (TokenKind::Digit(_), TokenKind::Digit(_)) => true,
+            (TokenKind::Char(_), TokenKind::Char(_)) => true,
+            _ => false,
+        }
+    }
 }

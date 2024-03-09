@@ -1,8 +1,6 @@
-
-use std::{cell::RefCell, rc::Rc, rc::Weak};
-
-mod token;
-use token::*;
+#![allow(dead_code)]
+use crate::token::*;
+use std::{cell::RefCell, iter::Peekable, rc::Rc, rc::Weak};
 
 struct Production<'a> {
     // chosen as string instead of a enum because
@@ -27,7 +25,7 @@ where
     T: Iterator<Item = &'a Token>,
 {
     root: Result<Rc<RefCell<Production<'a>>>, ParseError<'a>>,
-    tokens: T,
+    tokens: Peekable<T>,
     // this is only ever supposed to be a production
     // but it would be difficult to change types becuase nodes reference counted
     last_production: Weak<RefCell<Production<'a>>>,
@@ -45,7 +43,7 @@ where
         }));
         let mut cst = ConcreteSyntaxTree {
             root: Ok(root_node.clone()),
-            tokens,
+            tokens: tokens.peekable(),
             last_production: Rc::downgrade(&root_node),
         };
         cst.do_program();
@@ -87,9 +85,7 @@ where
         match token {
             Some(t) => {
                 for kind in kinds {
-                    // will need to change this to ensure that it properly matches
-                    // the nested types
-                    if matches!(&t.kind, kind) {
+                    if t.is_like(kind) {
                         last_node.children.push(NodeEnum::Terminal(&t));
                         return;
                     }
@@ -103,10 +99,70 @@ where
         }
     }
 
+    /*
+     * PARSING GRAMMAR do_GRAMMAR_RULE
+     *
+     */
     fn do_program(&mut self) {
-        // other stuff
+        //  rule of program already done during init
+        self.do_block();
         self.match_kind(vec![TokenKind::Symbol(Symbol::EndProgram)]);
     }
+
+    fn do_block(&mut self) {
+        self.add_production("Block".to_string());
+        self.match_kind(vec![TokenKind::Symbol(Symbol::OpenBlock)]);
+        self.do_statement_list();
+        self.match_kind(vec![TokenKind::Symbol(Symbol::CloseBlock)]);
+        self.up_root();
+    }
+
+    fn do_statement_list(&mut self) {
+        self.add_production("Statement List".to_string());
+        let next_token = match self.tokens.peek() {
+            Some(t) => t,
+            None => return,
+        };
+
+        // only thing that will follow the nothing of statement
+        if next_token.is_like(TokenKind::Symbol(Symbol::CloseBlock)) {
+            return;
+        }
+
+        self.do_statement();
+        self.do_statement_list();
+        self.up_root()
+    }
+
+    fn do_statement(&mut self) {
+        self.add_production("Statement".to_string());
+        let next_token = match self.tokens.peek() {
+            Some(t) => t,
+            None => return,
+        };
+        if next_token.is_like(TokenKind::Keyword(Keyword::Print)) {
+            self.do_print_statement();
+            // the
+        } else if next_token.is_like(TokenKind::Char(Char { letter: 'X' })) {
+            self.do_assignment_statement()
+        } else if next_token.is_like(TokenKind::Keyword(Keyword::Int))
+            || next_token.is_like(TokenKind::Keyword(Keyword::If))
+            || next_token.is_like(TokenKind::Keyword(Keyword::Int))
+        {
+        }
+
+        self.up_root();
+    }
+
+    fn do_print_statement(&mut self) {}
+
+    fn do_assignment_statement(&mut self) {}
+
+    fn do_var_decl(&mut self) {}
+
+    fn do_while_statement(&mut self) {}
+
+    fn do_if_statement(&mut self) {}
 }
 
 pub fn parse<'a, T>(mut tokens: T)
@@ -115,6 +171,3 @@ where
 {
     let cst = ConcreteSyntaxTree::new(tokens);
 }
-
-
-

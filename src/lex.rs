@@ -1,6 +1,7 @@
 // SO SAD I DIDNT USE REGEX, but I really dont think it's the right way
 //    to go for this project
 // use regex::Regex;
+use crate::token::*;
 use colored::Colorize;
 use std::{
     fs::File,
@@ -8,8 +9,6 @@ use std::{
     io::{BufRead, BufReader},
     path::Path,
 };
-use crate::token::*;
-
 
 pub struct InvalidChar {
     character: char,
@@ -92,6 +91,12 @@ fn get_token(
     match buffer {
         keyword_mappings::BOOLEAN => Some(Token {
             kind: TokenKind::Keyword(Keyword::Boolean),
+            start_end_position,
+            line,
+            representation: buffer.to_string(),
+        }),
+        keyword_mappings::STRING => Some(Token {
+            kind: TokenKind::Keyword(Keyword::String),
             start_end_position,
             line,
             representation: buffer.to_string(),
@@ -333,6 +338,7 @@ fn get_token_verbose_name(token: &TokenKind) -> &str {
         TokenKind::Keyword(keyword) => match keyword {
             Keyword::LoopOnTrue => "LOOP_ON_TRUE",
             Keyword::If => "IF_TRUE_DO",
+            Keyword::String => "STRING_TYPE",
             Keyword::Boolean => "TYPE_BOOL",
             Keyword::Int => "INT_TYPE",
             Keyword::True => "LITERAL_TRUE",
@@ -848,6 +854,21 @@ mod lex_tests {
         ];
         let expected_tokens = reps_to_tokens(expected_reps);
         let path = Path::new("test_cases/general/multi-program");
+        let tokens = get_lexemes(path);
+        assert!(tokens_are_like(&expected_tokens, &tokens));
+    }
+
+    #[test]
+    fn string() {
+        // Where did some of my tests go?????
+        // I swear I had a test called abc's that went over all tokens
+        // I looked at commit history and didn't find anything and my git stash
+        // I had distinctly 10 tests
+        // apparently I did not have the string token
+        // maybe it is somehow on my desktop idk
+        let expected_reps = vec!["string"];
+        let expected_tokens = reps_to_tokens(expected_reps);
+        let path = Path::new("test_cases/lex-edge-cases/string");
         let tokens = get_lexemes(path);
         assert!(tokens_are_like(&expected_tokens, &tokens));
     }
