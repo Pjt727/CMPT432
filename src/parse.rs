@@ -573,8 +573,10 @@ where
     }
 }
 
-// I do not really have a programatic way to test parse test unless
+// I only have a really limited way to programatically test parse unless
 //    I were to hardcode the cst tree and like... no
+// I do check to see if the error given is expected to check the errors
+//    and ensure that programs that should parse do parse correctly
 #[cfg(test)]
 mod parse_tests {
     use super::*;
@@ -672,6 +674,45 @@ mod parse_tests {
         }
     }
 
+    #[test]
+    fn stolen_err1() {
+        let path = Path::new("test_cases/parse-edge-cases/stolen_err1");
+        let lexemes = get_lexemes(path);
+        let mut tokens = vec![];
+        for lexeme in lexemes {
+            match lexeme {
+                Ok(token) => tokens.push(token),
+                Err(lex_problem) => match lex_problem {
+                    LexProblem::LexError(_) => panic!("Error during lex!!"),
+                    LexProblem::LexWarning(_) => continue,
+                },
+            }
+        }
+
+        let cst = ConcreteSyntaxTree::new(tokens.iter());
+        cst.show_parse_steps();
+        cst.show_cst();
+        match cst.root {
+            Ok(_) => panic!("Expected error found root!!"),
+            Err(parse_error) => {
+                let mut expected_tokens = parse_error.expected_kinds.iter();
+                assert!(matches!(
+                    expected_tokens.next().unwrap(),
+                    // expecte eop in case of two many braces on left
+                    TokenKind::Symbol(Symbol::CheckEquality)
+                ));
+                assert!(matches!(
+                    expected_tokens.next().unwrap(),
+                    // expecte eop in case of two many braces on left
+                    TokenKind::Symbol(Symbol::CheckInequality)
+                ));
+                assert!(parse_error
+                    .token_found
+                    .unwrap()
+                    .is_like(TokenKind::Symbol(Symbol::CloseParenthesis)));
+            }
+        }
+    }
     #[test]
     fn like_braces() {
         // file:

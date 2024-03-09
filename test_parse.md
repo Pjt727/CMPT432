@@ -6,7 +6,9 @@
 - ex: `cargo test hello_parse`
 - Note that the test does not format programs the same way as the running it through main
 - ex: `cargo run .\test_cases\general\hello-compiler`
-- this is the nicer output
+- this is the nicer output than in the tests
+- You can also still run multiple files by passing their directory into cargo run
+- ex: `cargo run .\test_cases\general\`
 
 # Interesting tests
 - not really a parse test but I added a test case which has interesting results on the main program

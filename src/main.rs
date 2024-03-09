@@ -73,6 +73,7 @@ fn compile_steps(file: &Path) {
                 errors_and_warnings.0,
                 errors_and_warnings.1,
             );
+            println!("{} because of lex errors", "Skipping Parse".red())
         }
         println!();
         match end_index {
