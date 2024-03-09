@@ -54,7 +54,13 @@ where
         return cst;
     }
 
-    fn show_parse_steps(self) {
+    pub fn has_error(self) -> bool {
+        match self.root {
+            Ok(_) => false,
+            Err(_) => true,
+        }
+    }
+    pub fn show_parse_steps(self) {
         static INFO_TEXT: &str = "DEBUG INFO parse:";
         static ERROR_TEXT: &str = "DEBUG ERROR parse:";
         for production in self.productions {
@@ -95,6 +101,9 @@ where
 
     // moves the last_node to the parrent of the current node
     fn up_root(&mut self) {
+        if let Err(_) = self.root {
+            return;
+        }
         let last_production_weak = &self.last_production;
         let last_production_strong = last_production_weak.upgrade().unwrap();
         let last_production = last_production_strong.borrow_mut();
@@ -106,6 +115,18 @@ where
 
     // has the side affect of moving the last_node to the added production
     fn add_production(&mut self, production_name: String) {
+        dbg!(&production_name);
+        match self.tokens.peek() {
+            Some(t) => {
+                println!("{}", get_token_verbose_name(&t.kind));
+            }
+            None => {
+                println!("No Token")
+            }
+        };
+        if let Err(_) = self.root {
+            return;
+        }
         self.productions.push(production_name.clone());
         let last_production_weak = &self.last_production;
         let last_production_strong = last_production_weak.upgrade().unwrap();
@@ -138,14 +159,17 @@ where
         let token = self.tokens.next();
         match token {
             Some(t) => {
-                for kind in kinds {
+                for kind in kinds.clone() {
                     if t.is_like(kind) {
                         last_node.children.push(NodeEnum::Terminal(&t));
                         return;
                     }
                 }
                 // will change to error later
-                panic!("Did not match any tokens");
+                self.add_error(ParseError {
+                    token_found: Some(t),
+                    expected_kinds: kinds,
+                })
             }
 
             // maybe change this panic to an error message
@@ -507,6 +531,26 @@ mod parse_tests {
     fn hello_parse() {
         // file: {}$
         let path = Path::new("test_cases/general/hello-compiler");
+        let lexemes = get_lexemes(path);
+        let mut tokens = vec![];
+        for lexeme in lexemes {
+            match lexeme {
+                Ok(token) => tokens.push(token),
+                Err(lex_problem) => match lex_problem {
+                    LexProblem::LexError(_) => panic!("Error during lex!!"),
+                    LexProblem::LexWarning(_) => continue,
+                },
+            }
+        }
+
+        let cst = ConcreteSyntaxTree::new(tokens.iter());
+        cst.show_parse_steps();
+    }
+
+    #[test]
+    fn parse_with_spaces() {
+        // file: {}$
+        let path = Path::new("test_cases/general/lex-with-spaces");
         let lexemes = get_lexemes(path);
         let mut tokens = vec![];
         for lexeme in lexemes {

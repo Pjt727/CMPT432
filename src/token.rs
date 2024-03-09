@@ -121,6 +121,7 @@ impl Clone for TokenKind {
     }
 }
 
+#[derive(Clone)]
 pub struct Token {
     pub kind: TokenKind,
     pub start_end_position: (i32, i32),
