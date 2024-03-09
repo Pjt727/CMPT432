@@ -440,7 +440,6 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
         line_number += 1;
         let line = line.expect("Unexpected File Reading Error");
         for c in line.chars() {
-            dbg!(c, in_comment);
             // first check for comments
             // put here here bc comments dont generate tokens
             if in_comment {
@@ -579,6 +578,13 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
             false,
         );
     }
+    // check to see if there is a comment close before eop check to create a new program to allow
+    //    missing eop program
+    if in_comment {
+        let comment_error_entry = LexProblem::LexWarning(LexWarning::MissingCommentClose);
+        token_stream.push(Err(comment_error_entry))
+    }
+
     // check if file ends with $
     let mut ends_with_eop = false;
     if let Some(last_token_entry) = token_stream.last() {
@@ -591,10 +597,6 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
     if !ends_with_eop {
         let eop_error_entry = LexProblem::LexWarning(LexWarning::MissingEndProgram);
         token_stream.push(Err(eop_error_entry));
-    }
-    if in_comment {
-        let comment_error_entry = LexProblem::LexWarning(LexWarning::MissingCommentClose);
-        token_stream.push(Err(comment_error_entry))
     }
 
     return token_stream;

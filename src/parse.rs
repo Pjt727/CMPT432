@@ -125,8 +125,13 @@ where
             match child {
                 NodeEnum::Production(p) => {
                     let p_mut = p.borrow_mut();
-                    println!("{}<{}>", indent.blue(), p_mut.rule);
-                    self.traverse_cst(&p_mut.children, depth + 1);
+
+                    // this check ensures that empty productions that could be consider "lead nodes"
+                    //    are not displayed
+                    if !p_mut.children.is_empty() {
+                        println!("{}<{}>", indent.blue(), p_mut.rule);
+                        self.traverse_cst(&p_mut.children, depth + 1);
+                    }
                 }
                 NodeEnum::Terminal(t) => {
                     println!("{}[{}]", indent.blue(), t.representation)
@@ -239,6 +244,7 @@ where
             TokenKind::Keyword(Keyword::Print),
             TokenKind::Id(Id { name: 'X' }),
             TokenKind::Keyword(Keyword::Int),
+            TokenKind::Symbol(Symbol::OpenBlock),
             TokenKind::Keyword(Keyword::Boolean),
             TokenKind::Keyword(Keyword::String),
             TokenKind::Keyword(Keyword::LoopOnTrue),
@@ -269,6 +275,7 @@ where
         let expected_kinds = vec![
             TokenKind::Keyword(Keyword::Print),
             TokenKind::Id(Id { name: 'X' }),
+            TokenKind::Symbol(Symbol::OpenBlock),
             TokenKind::Keyword(Keyword::Int),
             TokenKind::Keyword(Keyword::Boolean),
             TokenKind::Keyword(Keyword::String),
@@ -299,6 +306,8 @@ where
             self.do_while_statement();
         } else if next_token.is_like(TokenKind::Keyword(Keyword::If)) {
             self.do_if_statement();
+        } else if next_token.is_like(TokenKind::Symbol(Symbol::OpenBlock)) {
+            self.do_block();
         } else {
             let cloned_reference = next_token.clone();
             self.add_error(ParseError {
@@ -590,6 +599,13 @@ mod parse_tests {
 
         let cst = ConcreteSyntaxTree::new(tokens.iter());
         cst.show_parse_steps();
+        cst.show_cst();
+        match cst.root {
+            Ok(_) => {}
+            Err(_) => {
+                panic!("Expected no errors!")
+            }
+        }
     }
 
     #[test]
@@ -610,5 +626,77 @@ mod parse_tests {
 
         let cst = ConcreteSyntaxTree::new(tokens.iter());
         cst.show_parse_steps();
+        cst.show_cst();
+        match cst.root {
+            Ok(_) => {}
+            Err(_) => {
+                panic!("Expected no errors!")
+            }
+        }
+    }
+
+    #[test]
+    fn unlike_braces() {
+        // file:
+        //  {{{{{{}}} /* comments are ignored */ }}}}$
+        let path = Path::new("test_cases/parse-edge-cases/unlike_braces");
+        let lexemes = get_lexemes(path);
+        let mut tokens = vec![];
+        for lexeme in lexemes {
+            match lexeme {
+                Ok(token) => tokens.push(token),
+                Err(lex_problem) => match lex_problem {
+                    LexProblem::LexError(_) => panic!("Error during lex!!"),
+                    LexProblem::LexWarning(_) => continue,
+                },
+            }
+        }
+
+        let cst = ConcreteSyntaxTree::new(tokens.iter());
+        cst.show_parse_steps();
+        cst.show_cst();
+        match cst.root {
+            Ok(_) => panic!("Expected error found root!!"),
+            Err(parse_error) => {
+                let mut expected_tokens = parse_error.expected_kinds.iter();
+                assert!(matches!(
+                    expected_tokens.next().unwrap(),
+                    // expecte eop in case of two many braces on left
+                    TokenKind::Symbol(Symbol::EndProgram)
+                ));
+                assert!(parse_error
+                    .token_found
+                    .unwrap()
+                    .is_like(TokenKind::Symbol(Symbol::CloseBlock)));
+            }
+        }
+    }
+
+    #[test]
+    fn like_braces() {
+        // file:
+        //  {{{{{{}}} /* comments are ignored */ }}}}$
+        let path = Path::new("test_cases/parse-edge-cases/like_braces");
+        let lexemes = get_lexemes(path);
+        let mut tokens = vec![];
+        for lexeme in lexemes {
+            match lexeme {
+                Ok(token) => tokens.push(token),
+                Err(lex_problem) => match lex_problem {
+                    LexProblem::LexError(_) => panic!("Error during lex!!"),
+                    LexProblem::LexWarning(_) => continue,
+                },
+            }
+        }
+
+        let cst = ConcreteSyntaxTree::new(tokens.iter());
+        cst.show_parse_steps();
+        cst.show_cst();
+        match cst.root {
+            Ok(_) => {}
+            Err(_) => {
+                panic!("Expected no errors!")
+            }
+        }
     }
 }

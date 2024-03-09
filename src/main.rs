@@ -31,8 +31,11 @@ fn compile_steps(file: &Path) {
 
             // move on to parse
             let mut tokens: Vec<token::Token> = vec![];
-            let safe_end_index = end_index.unwrap_or(token_entries.len());
-            for lexeme in token_entries[amount_processed..safe_end_index + 1].iter() {
+            let safe_end_range = match end_index {
+                Some(index) => index + amount_processed + 1,
+                None => token_entries.len(),
+            };
+            for lexeme in token_entries[amount_processed..safe_end_range].iter() {
                 match lexeme {
                     Ok(token) => tokens.push(token.clone()),
                     Err(lex_problem) => match lex_problem {
@@ -43,7 +46,7 @@ fn compile_steps(file: &Path) {
                                 lex::LexWarning::MissingEndProgram => tokens.push(token::Token {
                                     kind: token::TokenKind::Symbol(token::Symbol::EndProgram),
                                     // -1 to demonstrate that it did not exist in the program
-                                    start_end_position: (-1, -1),
+                                    start_end_position: (-1, 0),
                                     line: -1,
                                     representation: "$".to_string(),
                                 }),
@@ -71,7 +74,7 @@ fn compile_steps(file: &Path) {
                 errors_and_warnings.1,
             );
         }
-
+        println!();
         match end_index {
             Some(end_index) => amount_processed += end_index + 1,
             None => break,
