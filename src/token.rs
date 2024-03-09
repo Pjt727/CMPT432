@@ -1,5 +1,6 @@
 use std::mem::discriminant;
 
+#[derive(Clone)]
 pub enum Keyword {
     LoopOnTrue,
     If,
@@ -28,6 +29,7 @@ pub struct Id {
     pub name: char,
 }
 
+#[derive(Clone)]
 pub enum Symbol {
     OpenBlock,
     CloseBlock,
@@ -72,6 +74,18 @@ pub enum TokenKind {
     Symbol(Symbol),
     Digit(Digit),
     Char(Char),
+}
+
+impl Clone for TokenKind {
+    fn clone(&self) -> Self {
+        match self {
+            TokenKind::Keyword(k) => TokenKind::Keyword(k.clone()),
+            TokenKind::Id(id) => TokenKind::Id(Id { name: id.name }),
+            TokenKind::Symbol(s) => TokenKind::Symbol(s.clone()),
+            TokenKind::Digit(d) => TokenKind::Digit(Digit { value: d.value }),
+            TokenKind::Char(c) => TokenKind::Char(Char { letter: c.letter }),
+        }
+    }
 }
 
 pub struct Token {
