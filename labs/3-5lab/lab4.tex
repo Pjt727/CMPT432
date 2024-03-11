@@ -81,7 +81,7 @@
    \normalfont \normalsize 
    \textsc{CMPT 308 - Spring 2024 - Dr. Labouseur} \\[10pt] % Header stuff.
    \horrule{0.5pt} \\[0.25cm] 	% Top horizontal rule
-   \huge Lab 3 -- ~Lexer \\     	    % Assignment title
+   \huge Lab 4 -- ~Lexer \\     	    % Assignment title
    \horrule{0.5pt} \\[0.25cm] 	% Bottom horizontal rule
 }
 
@@ -99,132 +99,61 @@
 
 % - -- -  - -- -  - -- -  -
 \section{Crafting A Compiler}
-\subsection{4.7 derivations}
-\begin{verbatim}
-A)
-E $ 
-T plus E $ 
-F plus E $ 
-num plus E $ 
-num plus T plus E $ 
-num plus T times F plus E $ 
-num plus F times F plus E $ 
-num plus num times num plus E $ 
-num plus num times num plus E $ 
-num plus num times num plus T $ 
-num plus num times num plus F $ 
-num plus num times num plus num $ 
-B)
-E $ 
-T plus E $ 
-T plus T plus E $ 
-T plus T plus T $ 
-T plus T plus F $ 
-T plus T plus num $ 
-T plus T times F plus num $ 
-T plus T times num plus num $ 
-T plus F times num plus num $ 
-T plus num times num plus num $ 
-F plus num times num plus num $ 
-num plus num times num plus num $ 
-\end{verbatim}
-c)\\
-The left to right associatvity of operators can derive the same
-set of terminal symbols with different trees. If I actually
-followed the rules it probably would have happend this way.
-This is because the langauge is not LL1.
-\subsection{5.2c recursive parser}
-\begin{verbatim}
-let tokens = new Tokens;
-let current_node = new Node;
-let tree = new Tree(current_node);
-
-fn match(token) {
-    if tokens.next() == token {
-        tree.add(token);
-    } else {
-        err;
-    }
-}
-
-fn move_up() {
-    current_node = current_node.parent;
-}
-
-fn do_start() {
-    do_value();
-    match($);
-    move_up();
-}
-
-fn do_value() {
-    next_token = tokens.peek();
-    if (next_token == num) {
-        match(num);
-    } else if (next_token == |paren) {
-        match(lparen);
-        do_expr();
-        match(rparen);
-    } else {
-        err;
-    }
-    move_up():
-}
-
-fn do_expr() {
-    next_token = tokens.peek();
-    if (next_token == plus) {
-        match(plus);
-        do_value()
-        do_value()
-    } else if (next_token == prod) {
-        match(prod);
-        do_values()
-    } else {
-        err;
-    }
-    move_up():
-}
-
-fn do_values() {
-    next_token = tokens.peek();
-    if (next_token in [num, lparen]) {
-        do_value();
-        do_values();
-    }
-    move_up():
-}
-\end{verbatim}
-\section{Dragon}
-\subsection{Exercise 4.2.1}
-\begin{verbatim}
-A)
-S
-SS*
-SS+S*
-aS+S*
-aa+S*
-aa+a*
-B)
-S
-Sa*
-SS+a*
-Sa+a*
-aa+a*
-\end{verbatim}
+\subsection{4.9 first and follow set}
+\begin{table}[h]
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{Production} & \textbf{Nullable?} & \textbf{First Set} & \textbf{Follow Set} \\
+\hline
+    S & No & \{a, b, c, d\} & \{e, d\} \\
+    B & No & \{b, c, d\} & \{e, d\} \\
+    C & No & \{c, d\} & \{e, d\}\\
+\hline
+\end{tabular}
+\end{table}
 \newpage
+\subsection{5.10 dangling else's}
+    % if expr then if expr then other else other 
 \begin{verbatim}
-C)
+First tree)
+
 S
-- S
--- S
---- a
--- S
---- a
--- +
-- S
--- a
-- *
+- Stmt
+-- if expr then
+-- Stmt
+--- if expr then
+--- Stmt
+---- other
+--- else
+--- Stmt
+---- other
+
+Second tree)
+S
+- Stmt
+-- if expr then
+-- Stmt
+--- if expr then
+--- Stmt
+---- other
+-- else
+-- Stmt
+--- other
+
+The trees have different correspondance of if and else as the different branches are 
+constructed in different and thus have the other terminals at different depths.
 \end{verbatim}
+
+\section{Dragon}
+\subsection{First and follow sets 4.4.3}
+\begin{table}[h]
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{Production} & \textbf{Nullable?} & \textbf{First Set} & \textbf{Follow Set} \\
+\hline
+    S & No & \{a\} & \{a, +, *\} \\
+\hline
+\end{tabular}
+\end{table}
 \end{document}
 
