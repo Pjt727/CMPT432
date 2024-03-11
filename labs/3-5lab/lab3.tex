@@ -1,0 +1,230 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% CMPT 435
+% Lab Zero
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Short Sectioned Assignment
+% LaTeX Template
+% Version 1.0 (5/5/12)
+%
+% This template has been downloaded from: http://www.LaTeXTemplates.com
+% Original author: % Frits Wenneker (http://www.howtotex.com)
+% License: CC BY-NC-SA 3.0 (http://creativecommons.org/licenses/by-nc-sa/3.0/)
+% Modified by Alan G. Labouseur  - alan@labouseur.com, and Patrick Tyler - Patrick.Tyler1@marist.edu
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%----------------------------------------------------------------------------------------
+%	PACKAGES AND OTHER DOCUMENT CONFIGURATIONS
+%----------------------------------------------------------------------------------------
+
+\documentclass[letterpaper, 10pt]{article} 
+
+\usepackage[english]{babel} % English language/hyphenation
+\usepackage{graphicx}
+\usepackage[lined,linesnumbered,commentsnumbered]{algorithm2e}
+\usepackage{listings}
+\usepackage{fancyhdr} % Custom headers and footers
+\pagestyle{fancyplain} % Makes all pages in the document conform to the custom headers and footers
+\usepackage{lastpage}
+\usepackage{url}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{xurl}
+\usepackage{multicol}
+\usepackage{fancyvrb}
+% Stolen from https://www.overleaf.com/learn/latex/Code_listing 
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.5,0.2}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+\lstset{style=mystyle, language=c++}
+
+
+\fancyhead{} % No page header - if you want one, create it in the same way as the footers below
+\fancyfoot[L]{} % Empty left footer
+\fancyfoot[R]{}
+
+\renewcommand{\headrulewidth}{0pt} % Remove header underlines
+\renewcommand{\footrulewidth}{0pt} % Remove footer underlines
+\setlength{\headheight}{13.6pt} % Customize the height of the header
+
+%----------------------------------------------------------------------------------------
+%	TITLE SECTION
+%----------------------------------------------------------------------------------------
+
+\newcommand{\horrule}[1]{\rule{\linewidth}{#1}} % Create horizontal rule command with 1 argument of height
+
+\title{	
+   \normalfont \normalsize 
+   \textsc{CMPT 308 - Spring 2024 - Dr. Labouseur} \\[10pt] % Header stuff.
+   \horrule{0.5pt} \\[0.25cm] 	% Top horizontal rule
+   \huge Lab 3-5 -- ~Lexer \\     	    % Assignment title
+   \horrule{0.5pt} \\[0.25cm] 	% Bottom horizontal rule
+}
+
+\author{Patrick Tyler \\ \normalsize Patrick.Tyler1@marist.edu}
+
+\date{\normalsize\today} 	% Today's date.
+
+\begin{document}
+
+\maketitle % Print the title
+
+%----------------------------------------------------------------------------------------
+%   CONTENT SECTION
+%----------------------------------------------------------------------------------------
+
+% - -- -  - -- -  - -- -  -
+\section{Crafting A Compiler}
+\subsection{4.7 derivations}
+\begin{verbatim}
+A)
+E $ 
+T plus E $ 
+F plus E $ 
+num plus E $ 
+num plus T plus E $ 
+num plus T times F plus E $ 
+num plus F times F plus E $ 
+num plus num times num plus E $ 
+num plus num times num plus E $ 
+num plus num times num plus T $ 
+num plus num times num plus F $ 
+num plus num times num plus num $ 
+B)
+E $ 
+T plus E $ 
+T plus T plus E $ 
+T plus T plus T $ 
+T plus T plus F $ 
+T plus T plus num $ 
+T plus T times F plus num $ 
+T plus T times num plus num $ 
+T plus F times num plus num $ 
+T plus num times num plus num $ 
+F plus num times num plus num $ 
+num plus num times num plus num $ 
+\end{verbatim}
+c)\\
+The left to right associatvity of operators can derive the same
+set of terminal symbols with different trees. If I actually
+followed the rules it probably would have happend this way.
+This is because the langauge is not LL1.
+\subsection{5.2c recursive parser}
+\begin{verbatim}
+let tokens = new Tokens;
+let current_node = new Node;
+let tree = new Tree(current_node);
+
+fn match(token) {
+    if tokens.next() == token {
+        tree.add(token);
+    } else {
+        err;
+    }
+}
+
+fn move_up() {
+    current_node = current_node.parent;
+}
+
+fn do_start() {
+    do_value();
+    match($);
+    move_up();
+}
+
+fn do_value() {
+    next_token = tokens.peek();
+    if (next_token == num) {
+        match(num);
+    } else if (next_token == |paren) {
+        match(lparen);
+        do_expr();
+        match(rparen);
+    } else {
+        err;
+    }
+    move_up():
+}
+
+fn do_expr() {
+    next_token = tokens.peek();
+    if (next_token == plus) {
+        match(plus);
+        do_value()
+        do_value()
+    } else if (next_token == prod) {
+        match(prod);
+        do_values()
+    } else {
+        err;
+    }
+    move_up():
+}
+
+fn do_values() {
+    next_token = tokens.peek();
+    if (next_token in [num, lparen]) {
+        do_value();
+        do_values();
+    }
+    move_up():
+}
+\end{verbatim}
+\section{Dragon}
+\subsection{Exercise 4.2.1}
+\begin{verbatim}
+A)
+S
+SS*
+SS+S*
+aS+S*
+aa+S*
+aa+a*
+B)
+S
+Sa*
+SS+a*
+Sa+a*
+aa+a*
+\end{verbatim}
+\newpage
+\begin{verbatim}
+C)
+S
+- S
+-- S
+--- a
+-- S
+--- a
+-- +
+- S
+-- a
+- *
+\end{verbatim}
+\end{document}
+
