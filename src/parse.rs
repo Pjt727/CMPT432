@@ -432,25 +432,7 @@ where
         if next_token.is_like(TokenKind::Symbol(Symbol::Addition)) {
             self.do_int_op();
             self.do_expr();
-        } else {
-            let mut no_matches = true;
-            // need the clone bc I move token kinds
-            for token_kind in expected_kinds.clone() {
-                if next_token.is_like(token_kind) {
-                    no_matches = false;
-                    break;
-                }
-            }
-            if no_matches {
-                let cloned_reference = next_token.clone();
-                self.add_error(ParseError {
-                    token_found: Some(cloned_reference),
-                    expected_kinds,
-                });
-                return;
-            }
         }
-
         self.up_root()
     }
 
@@ -577,16 +559,17 @@ where
 //    I were to hardcode the cst tree and like... no
 // I do check to see if the error given is expected to check the errors
 //    and ensure that programs that should parse do parse correctly
+// Also bc i did not want to copy my other code this can only do single program files and must have
+// $
 #[cfg(test)]
 mod parse_tests {
     use super::*;
     use crate::lex::*;
     use std::path::Path;
 
-    #[test]
-    fn hello_parse() {
+    fn helper_ok(path_str: String) {
         // file: {}$
-        let path = Path::new("test_cases/general/hello-compiler");
+        let path = Path::new(&path_str);
         let lexemes = get_lexemes(path);
         let mut tokens = vec![];
         for lexeme in lexemes {
@@ -611,30 +594,17 @@ mod parse_tests {
     }
 
     #[test]
+    fn hello_parse() {
+        // file: {}$
+        let path = "test_cases/general/hello-compiler";
+        helper_ok(path.to_string());
+    }
+
+    #[test]
     fn parse_with_spaces() {
         // file: {}$
-        let path = Path::new("test_cases/general/lex-with-spaces");
-        let lexemes = get_lexemes(path);
-        let mut tokens = vec![];
-        for lexeme in lexemes {
-            match lexeme {
-                Ok(token) => tokens.push(token),
-                Err(lex_problem) => match lex_problem {
-                    LexProblem::LexError(_) => panic!("Error during lex!!"),
-                    LexProblem::LexWarning(_) => continue,
-                },
-            }
-        }
-
-        let cst = ConcreteSyntaxTree::new(tokens.iter());
-        cst.show_parse_steps();
-        cst.show_cst();
-        match cst.root {
-            Ok(_) => {}
-            Err(_) => {
-                panic!("Expected no errors!")
-            }
-        }
+        let path = "test_cases/general/lex-with-spaces";
+        helper_ok(path.to_string())
     }
 
     #[test]
@@ -713,31 +683,24 @@ mod parse_tests {
             }
         }
     }
+
     #[test]
     fn like_braces() {
         // file:
         //  {{{{{{}}} /* comments are ignored */ }}}}$
-        let path = Path::new("test_cases/parse-edge-cases/like_braces");
-        let lexemes = get_lexemes(path);
-        let mut tokens = vec![];
-        for lexeme in lexemes {
-            match lexeme {
-                Ok(token) => tokens.push(token),
-                Err(lex_problem) => match lex_problem {
-                    LexProblem::LexError(_) => panic!("Error during lex!!"),
-                    LexProblem::LexWarning(_) => continue,
-                },
-            }
-        }
+        let path = "test_cases/parse-edge-cases/like_braces";
+        helper_ok(path.to_string());
+    }
 
-        let cst = ConcreteSyntaxTree::new(tokens.iter());
-        cst.show_parse_steps();
-        cst.show_cst();
-        match cst.root {
-            Ok(_) => {}
-            Err(_) => {
-                panic!("Expected no errors!")
-            }
-        }
+    #[test]
+    fn failed_ok() {
+        let path1 = "test_cases/parse-edge-cases/failed_ok1";
+        helper_ok(path1.to_string());
+        let path2 = "test_cases/parse-edge-cases/failed_ok2";
+        helper_ok(path2.to_string());
+        let path3 = "test_cases/parse-edge-cases/failed_ok3";
+        helper_ok(path3.to_string());
+        let path4 = "test_cases/parse-edge-cases/failed_ok4";
+        helper_ok(path4.to_string());
     }
 }

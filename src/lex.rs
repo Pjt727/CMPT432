@@ -847,4 +847,9 @@ mod lex_tests {
         let tokens = get_lexemes(path);
         assert!(tokens_are_like(&expected_tokens, &tokens));
     }
+
+    #[test]
+    fn multi_string() {
+        todo!("re-IMPLEMENT MULTI LINE STRING ERRORS");
+    }
 }
