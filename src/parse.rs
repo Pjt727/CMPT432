@@ -410,6 +410,7 @@ where
             TokenKind::Symbol(Symbol::Addition),
             TokenKind::Symbol(Symbol::CloseParenthesis),
             // and then a lot in case that it was id = expr
+            TokenKind::Symbol(Symbol::OpenBlock),
             TokenKind::Keyword(Keyword::Print),
             TokenKind::Id(Id { name: 'X' }),
             TokenKind::Keyword(Keyword::Int),
@@ -417,6 +418,10 @@ where
             TokenKind::Keyword(Keyword::String),
             TokenKind::Keyword(Keyword::LoopOnTrue),
             TokenKind::Keyword(Keyword::If),
+            // THESE WERE MISSING
+            TokenKind::Symbol(Symbol::OpenBlock),
+            TokenKind::Symbol(Symbol::CheckInequality),
+            TokenKind::Symbol(Symbol::CheckEquality),
         ];
         let next_token = match self.tokens.peek() {
             Some(t) => t,
@@ -432,7 +437,25 @@ where
         if next_token.is_like(TokenKind::Symbol(Symbol::Addition)) {
             self.do_int_op();
             self.do_expr();
+        } else {
+            let mut no_matches = true;
+            // need the clone bc I move token kinds
+            for token_kind in expected_kinds.clone() {
+                if next_token.is_like(token_kind) {
+                    no_matches = false;
+                    break;
+                }
+            }
+            if no_matches {
+                let cloned_reference = next_token.clone();
+                self.add_error(ParseError {
+                    token_found: Some(cloned_reference),
+                    expected_kinds,
+                });
+                return;
+            }
         }
+
         self.up_root()
     }
 
