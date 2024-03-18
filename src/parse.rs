@@ -725,5 +725,44 @@ mod parse_tests {
         helper_ok(path3.to_string());
         let path4 = "test_cases/parse-edge-cases/failed_ok4";
         helper_ok(path4.to_string());
+        let path5 = "test_cases/parse-edge-cases/failed_err";
+        helper_ok(path5.to_string());
+    }
+
+    #[test]
+    fn failed_err() {
+        // file:
+        //  {{{{{{}}} /* comments are ignored */ }}}}$
+        let path = Path::new("test_cases/parse-edge-cases/failed_err");
+        let lexemes = get_lexemes(path);
+        let mut tokens = vec![];
+        for lexeme in lexemes {
+            match lexeme {
+                Ok(token) => tokens.push(token),
+                Err(lex_problem) => match lex_problem {
+                    LexProblem::LexError(_) => panic!("Error during lex!!"),
+                    LexProblem::LexWarning(_) => continue,
+                },
+            }
+        }
+
+        let cst = ConcreteSyntaxTree::new(tokens.iter());
+        cst.show_parse_steps();
+        cst.show_cst();
+        match cst.root {
+            Ok(_) => panic!("Expected error found root!!"),
+            Err(parse_error) => {
+                let mut expected_tokens = parse_error.expected_kinds.iter();
+                assert!(matches!(
+                    expected_tokens.next().unwrap(),
+                    // expecte eop in case of two many braces on left
+                    TokenKind::Symbol(Symbol::EndProgram)
+                ));
+                assert!(parse_error
+                    .token_found
+                    .unwrap()
+                    .is_like(TokenKind::Symbol(Symbol::CloseBlock)));
+            }
+        }
     }
 }
