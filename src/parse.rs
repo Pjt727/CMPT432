@@ -2,12 +2,64 @@
 #![allow(suspicious_double_ref_op)]
 use crate::token::*;
 use colored::Colorize;
+use std::fmt;
 use std::{cell::RefCell, iter::Peekable, rc::Rc, rc::Weak};
+
+#[derive(Clone)]
+enum ProductionRule {
+    Program,
+    Block,
+    StatementList,
+    Statement,
+    PrintStatement,
+    AssignmentStatement,
+    VarDecl,
+    WhileStatement,
+    IfStatement,
+    Expr,
+    IntExpr,
+    StringExpr,
+    BooleanExpr,
+    Id,
+    CharList,
+    Type,
+    Char,
+    Boolop,
+    Boolval,
+    Intop,
+}
+
+impl fmt::Display for ProductionRule {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ProductionRule::Program => write!(f, "Program"),
+            ProductionRule::Block => write!(f, "Block"),
+            ProductionRule::StatementList => write!(f, "Statement List"),
+            ProductionRule::Statement => write!(f, "Statement"),
+            ProductionRule::PrintStatement => write!(f, "Print Statement"),
+            ProductionRule::AssignmentStatement => write!(f, "Assignment Statement"),
+            ProductionRule::VarDecl => write!(f, "Var Declaration"),
+            ProductionRule::WhileStatement => write!(f, "While Statement"),
+            ProductionRule::IfStatement => write!(f, "If Statement"),
+            ProductionRule::Expr => write!(f, "Expression"),
+            ProductionRule::IntExpr => write!(f, "Int Expression"),
+            ProductionRule::StringExpr => write!(f, "String Expression"),
+            ProductionRule::BooleanExpr => write!(f, "Boolean Expression"),
+            ProductionRule::Id => write!(f, "Id"),
+            ProductionRule::Type => write!(f, "Type"),
+            ProductionRule::Char => write!(f, "Char"),
+            ProductionRule::Boolval => write!(f, "Boolean Value"),
+            ProductionRule::Intop => write!(f, "Int Operator"),
+            ProductionRule::CharList => write!(f, "Char List"),
+            ProductionRule::Boolop => write!(f, "Boolean Operation"),
+        }
+    }
+}
 
 struct Production<'a> {
     // chosen as string instead of a enum because
     // every produciton rule is only added in one place
-    rule: String,
+    rule: ProductionRule,
     children: Vec<NodeEnum<'a>>,
     parent: Option<Weak<RefCell<Production<'a>>>>,
 }
@@ -31,7 +83,7 @@ where
     // this is only ever supposed to be a production
     // but it would be difficult to change types becuase nodes reference counted
     last_production: Weak<RefCell<Production<'a>>>,
-    productions: Vec<String>,
+    productions: Vec<ProductionRule>,
 }
 
 impl<'a, T> ConcreteSyntaxTree<'a, T>
@@ -40,7 +92,7 @@ where
 {
     pub fn new(tokens: T) -> Self {
         let root_node = Rc::new(RefCell::new(Production {
-            rule: "Program".to_string(),
+            rule: ProductionRule::Program,
             children: vec![],
             parent: None,
         }));
@@ -48,7 +100,7 @@ where
             root: Ok(root_node.clone()),
             tokens: tokens.peekable(),
             last_production: Rc::downgrade(&root_node),
-            productions: vec!["Program".to_string()],
+            productions: vec![ProductionRule::Program],
         };
         cst.do_program();
         return cst;
@@ -154,16 +206,16 @@ where
     }
 
     // has the side affect of moving the last_node to the added production
-    fn add_production(&mut self, production_name: String) {
+    fn add_production(&mut self, production_rule: ProductionRule) {
         if let Err(_) = self.root {
             return;
         }
-        self.productions.push(production_name.clone());
+        self.productions.push(production_rule.clone());
         let last_production_weak = &self.last_production;
         let last_production_strong = last_production_weak.upgrade().unwrap();
         let mut last_node = last_production_strong.borrow_mut();
         let new_production = Rc::new(RefCell::new(Production {
-            rule: production_name,
+            rule: production_rule,
             children: vec![],
             parent: Some(last_production_weak.clone()),
         }));
@@ -231,7 +283,7 @@ where
     }
 
     fn do_block(&mut self) {
-        self.add_production("Block".to_string());
+        self.add_production(ProductionRule::Block);
         self.match_kind(vec![TokenKind::Symbol(Symbol::OpenBlock)]);
         self.do_statement_list();
         self.match_kind(vec![TokenKind::Symbol(Symbol::CloseBlock)]);
@@ -239,7 +291,7 @@ where
     }
 
     fn do_statement_list(&mut self) {
-        self.add_production("Statement List".to_string());
+        self.add_production(ProductionRule::StatementList);
         let expected_kinds = vec![
             TokenKind::Keyword(Keyword::Print),
             TokenKind::Id(Id { name: 'X' }),
@@ -271,7 +323,7 @@ where
     }
 
     fn do_statement(&mut self) {
-        self.add_production("Statement".to_string());
+        self.add_production(ProductionRule::Statement);
         let expected_kinds = vec![
             TokenKind::Keyword(Keyword::Print),
             TokenKind::Id(Id { name: 'X' }),
@@ -319,7 +371,7 @@ where
     }
 
     fn do_print_statement(&mut self) {
-        self.add_production("Print Statement".to_string());
+        self.add_production(ProductionRule::PrintStatement);
         self.match_kind(vec![TokenKind::Keyword(Keyword::Print)]);
         self.match_kind(vec![TokenKind::Symbol(Symbol::OpenParenthesis)]);
         self.do_expr();
@@ -328,7 +380,7 @@ where
     }
 
     fn do_assignment_statement(&mut self) {
-        self.add_production("Assignment Statement".to_string());
+        self.add_production(ProductionRule::AssignmentStatement);
         self.do_id();
         self.match_kind(vec![TokenKind::Symbol(Symbol::Assignment)]);
         self.do_expr();
@@ -336,14 +388,14 @@ where
     }
 
     fn do_var_decl(&mut self) {
-        self.add_production("Variable Declaration".to_string());
+        self.add_production(ProductionRule::VarDecl);
         self.do_type();
         self.do_id();
         self.up_root();
     }
 
     fn do_while_statement(&mut self) {
-        self.add_production("While Statement".to_string());
+        self.add_production(ProductionRule::WhileStatement);
         self.match_kind(vec![TokenKind::Keyword(Keyword::LoopOnTrue)]);
         self.do_boolean_expr();
         self.do_block();
@@ -351,7 +403,7 @@ where
     }
 
     fn do_if_statement(&mut self) {
-        self.add_production("If Statement".to_string());
+        self.add_production(ProductionRule::IfStatement);
         self.match_kind(vec![TokenKind::Keyword(Keyword::If)]);
         self.do_boolean_expr();
         self.do_block();
@@ -359,7 +411,7 @@ where
     }
 
     fn do_expr(&mut self) {
-        self.add_production("Expression".to_string());
+        self.add_production(ProductionRule::Expr);
         let expected_kinds = vec![
             TokenKind::Digit(Digit { value: 0 }),
             TokenKind::Symbol(Symbol::QuotatioinMark),
@@ -404,7 +456,7 @@ where
     }
 
     fn do_int_expr(&mut self) {
-        self.add_production("Int Expression".to_string());
+        self.add_production(ProductionRule::IntExpr);
         self.match_kind(vec![TokenKind::Digit(Digit { value: 0 })]);
         let expected_kinds = vec![
             TokenKind::Symbol(Symbol::Addition),
@@ -460,7 +512,7 @@ where
     }
 
     fn do_string_expr(&mut self) {
-        self.add_production("String Expression".to_string());
+        self.add_production(ProductionRule::StringExpr);
         self.match_kind(vec![TokenKind::Symbol(Symbol::QuotatioinMark)]);
         self.do_char_list();
         self.match_kind(vec![TokenKind::Symbol(Symbol::QuotatioinMark)]);
@@ -468,7 +520,7 @@ where
     }
 
     fn do_boolean_expr(&mut self) {
-        self.add_production("Boolean Expression".to_string());
+        self.add_production(ProductionRule::BooleanExpr);
         let expected_kinds = vec![
             TokenKind::Symbol(Symbol::OpenParenthesis),
             TokenKind::Keyword(Keyword::True),
@@ -501,13 +553,13 @@ where
     }
 
     fn do_id(&mut self) {
-        self.add_production("Id".to_string());
+        self.add_production(ProductionRule::Id);
         self.match_kind(vec![TokenKind::Id(Id { name: 'X' })]);
         self.up_root();
     }
 
     fn do_type(&mut self) {
-        self.add_production("Type".to_string());
+        self.add_production(ProductionRule::Type);
         self.match_kind(vec![
             TokenKind::Keyword(Keyword::Int),
             TokenKind::Keyword(Keyword::Boolean),
@@ -517,7 +569,7 @@ where
     }
 
     fn do_bool_op(&mut self) {
-        self.add_production("Boolean Operation".to_string());
+        self.add_production(ProductionRule::Boolop);
         self.match_kind(vec![
             TokenKind::Symbol(Symbol::CheckEquality),
             TokenKind::Symbol(Symbol::CheckInequality),
@@ -526,7 +578,7 @@ where
     }
 
     fn do_bool_val(&mut self) {
-        self.add_production("Boolean Value".to_string());
+        self.add_production(ProductionRule::Boolval);
         self.match_kind(vec![
             TokenKind::Keyword(Keyword::False),
             TokenKind::Keyword(Keyword::True),
@@ -535,13 +587,13 @@ where
     }
 
     fn do_int_op(&mut self) {
-        self.add_production("Int Operation".to_string());
+        self.add_production(ProductionRule::Intop);
         self.match_kind(vec![TokenKind::Symbol(Symbol::Addition)]);
         self.up_root();
     }
 
     fn do_char_list(&mut self) {
-        self.add_production("Char List".to_string());
+        self.add_production(ProductionRule::CharList);
         let expected_kinds = vec![
             TokenKind::Symbol(Symbol::QuotatioinMark),
             TokenKind::Char(Char { letter: 'X' }),
@@ -572,7 +624,7 @@ where
     }
 
     fn do_char(&mut self) {
-        self.add_production("Char".to_string());
+        self.add_production(ProductionRule::Char);
         self.match_kind(vec![TokenKind::Char(Char { letter: 'X' })]);
         self.up_root();
     }
