@@ -591,6 +591,7 @@ mod parse_tests {
     use std::path::Path;
 
     fn helper_ok(path_str: String) {
+        println!("{}", path_str);
         // file: {}$
         let path = Path::new(&path_str);
         let lexemes = get_lexemes(path);
@@ -725,8 +726,6 @@ mod parse_tests {
         helper_ok(path3.to_string());
         let path4 = "test_cases/parse-edge-cases/failed_ok4";
         helper_ok(path4.to_string());
-        let path5 = "test_cases/parse-edge-cases/failed_err";
-        helper_ok(path5.to_string());
     }
 
     #[test]

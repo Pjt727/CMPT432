@@ -18,6 +18,7 @@ pub struct InvalidChar {
 
 pub enum LexError {
     InvalidChar(InvalidChar),
+    MissingEndQuote(i32),
 }
 
 pub enum LexWarning {
@@ -338,6 +339,9 @@ fn get_error_text(problem: &LexProblem) -> String {
                 invalid_char.character, invalid_char.line, invalid_char.position
             )
         }
+        LexProblem::LexError(LexError::MissingEndQuote(line_number)) => {
+            format!("Missing End Quote on line {}", line_number)
+        }
         LexProblem::LexWarning(LexWarning::MissingEndProgram) => {
             format!("Missing EOP Symbol at End of Program")
         }
@@ -563,6 +567,14 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
                 in_string,
                 false,
             );
+            // string should always be closed at end of line
+            if in_string {
+                let comment_error_entry =
+                    LexProblem::LexError(LexError::MissingEndQuote(line_number));
+                token_stream.push(Err(comment_error_entry));
+                // reset for prett error handling
+                in_string = false;
+            }
         }
         start_char_position = 0;
     }
@@ -582,6 +594,12 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
     //    missing eop program
     if in_comment {
         let comment_error_entry = LexProblem::LexWarning(LexWarning::MissingCommentClose);
+        token_stream.push(Err(comment_error_entry))
+    }
+
+    // lex ended with open string
+    if in_string {
+        let comment_error_entry = LexProblem::LexError(LexError::MissingEndQuote(line_number));
         token_stream.push(Err(comment_error_entry))
     }
 
@@ -618,6 +636,15 @@ mod lex_tests {
         let mut in_string = false;
 
         for rep in reps {
+            // only really used to properly test string multi-line errors
+            if rep == "\n" {
+                if in_string {
+                    let comment_error_entry = LexProblem::LexError(LexError::MissingEndQuote(0));
+                    token_entries.push(Err(comment_error_entry))
+                }
+                in_string = false;
+                continue;
+            }
             match get_token(rep, (0, 0), 0, in_string) {
                 Some(token) => token_entries.push(Ok(token)),
                 None => {
@@ -850,6 +877,16 @@ mod lex_tests {
 
     #[test]
     fn multi_string() {
-        todo!("re-IMPLEMENT MULTI LINE STRING ERRORS");
+        // File:
+        // " This
+        // is
+        // err"
+        let expected_reps = vec![
+            "\"", "t", "h", "i", "s", "\n", "i", "s", "e", "r", "r", "\"", "\n",
+        ];
+        let expected_tokens = reps_to_tokens(expected_reps);
+        let path = Path::new("test_cases/lex-edge-cases/multiline_string");
+        let tokens = get_lexemes(path);
+        assert!(tokens_are_like(&expected_tokens, &tokens));
     }
 }
