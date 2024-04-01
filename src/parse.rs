@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 #![allow(suspicious_double_ref_op)]
 use crate::token::*;
 use colored::Colorize;
@@ -106,12 +105,6 @@ where
         return cst;
     }
 
-    pub fn has_error(self) -> bool {
-        match self.root {
-            Ok(_) => false,
-            Err(_) => true,
-        }
-    }
     pub fn show_parse_steps(&self) {
         static INFO_TEXT: &str = "DEBUG INFO parse:";
         static ERROR_TEXT: &str = "DEBUG ERROR parse:";

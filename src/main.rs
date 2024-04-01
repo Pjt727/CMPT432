@@ -4,6 +4,7 @@ use std::path::Path;
 mod lex;
 use colored::Colorize;
 mod parse;
+mod semantically_analyze;
 mod token;
 
 fn compile_steps(file: &Path) {
