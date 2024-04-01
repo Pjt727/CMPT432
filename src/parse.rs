@@ -55,7 +55,7 @@ impl fmt::Display for ProductionRule {
     }
 }
 
-struct Production<'a> {
+pub struct Production<'a> {
     // chosen as string instead of a enum because
     // every produciton rule is only added in one place
     rule: ProductionRule,
@@ -620,6 +620,13 @@ where
         self.add_production(ProductionRule::Char);
         self.match_kind(vec![TokenKind::Char(Char { letter: 'X' })]);
         self.up_root();
+    }
+
+    pub fn get_root(&self) -> Option<Weak<RefCell<Production<'a>>>> {
+        match &self.root {
+            Ok(root) => Some(Rc::downgrade(&root)),
+            Err(_) => None,
+        }
     }
 }
 

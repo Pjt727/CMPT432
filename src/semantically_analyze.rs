@@ -82,6 +82,7 @@ where
             last_production: Rc::downgrade(&root_node),
             marker: PhantomData,
         };
+        let root = cst.get_root();
 
         return ast;
     }
