@@ -5,7 +5,7 @@ use std::fmt;
 use std::{cell::RefCell, iter::Peekable, rc::Rc, rc::Weak};
 
 #[derive(Clone)]
-enum ProductionRule {
+pub enum ProductionRule {
     Program,
     Block,
     StatementList,
@@ -57,9 +57,9 @@ impl fmt::Display for ProductionRule {
 
 pub struct Production<'a> {
     // chosen as string instead of a enum because
-    // every produciton rule is only added in one place
-    rule: ProductionRule,
-    children: Vec<NodeEnum<'a>>,
+    // every production rule is only added in one place
+    pub rule: ProductionRule,
+    pub children: Vec<NodeEnum<'a>>,
     parent: Option<Weak<RefCell<Production<'a>>>>,
 }
 
@@ -68,7 +68,7 @@ struct ParseError<'a> {
     expected_kinds: Vec<TokenKind>,
 }
 
-enum NodeEnum<'a> {
+pub enum NodeEnum<'a> {
     Production(Rc<RefCell<Production<'a>>>),
     Terminal(&'a Token),
 }
@@ -80,7 +80,7 @@ where
     root: Result<Rc<RefCell<Production<'a>>>, ParseError<'a>>,
     tokens: Peekable<T>,
     // this is only ever supposed to be a production
-    // but it would be difficult to change types becuase nodes reference counted
+    // but it would be difficult to change types because nodes reference counted
     last_production: Weak<RefCell<Production<'a>>>,
     productions: Vec<ProductionRule>,
 }
@@ -147,7 +147,7 @@ where
 
     pub fn show_cst(&self) {
         static ERROR_TEXT: &str = "DEBUG ERROR parse:";
-        static INFO_TEXT: &str = "Sucessfully parsed";
+        static INFO_TEXT: &str = "Successfully parsed";
         let root = match &self.root {
             Ok(root) => {
                 println!("{} - Showing CST", INFO_TEXT.magenta());
@@ -184,7 +184,7 @@ where
             }
         }
     }
-    // moves the last_node to the parrent of the current node
+    // moves the last_node to the parent of the current node
     fn up_root(&mut self) {
         if let Err(_) = self.root {
             return;
@@ -270,8 +270,8 @@ where
         //  rule of program already done during init
         self.do_block();
         // the program ensures that there is only one end program
-        //    in the token slice so there is not need to esnure that
-        //    the terminal (tokens) have been exhuasted here
+        //    in the token slice so there is not need to ensure that
+        //    the terminal (tokens) have been exhausted here
         self.match_kind(vec![TokenKind::Symbol(Symbol::EndProgram)]);
     }
 
@@ -630,7 +630,7 @@ where
     }
 }
 
-// I only have a really limited way to programatically test parse unless
+// I only have a really limited way to programmatically test parse unless
 //    I were to hardcode the cst tree and like... no
 // I do check to see if the error given is expected to check the errors
 //    and ensure that programs that should parse do parse correctly
@@ -709,7 +709,7 @@ mod parse_tests {
                 let mut expected_tokens = parse_error.expected_kinds.iter();
                 assert!(matches!(
                     expected_tokens.next().unwrap(),
-                    // expecte eop in case of two many braces on left
+                    // expected eop in case of two many braces on left
                     TokenKind::Symbol(Symbol::EndProgram)
                 ));
                 assert!(parse_error
@@ -744,12 +744,12 @@ mod parse_tests {
                 let mut expected_tokens = parse_error.expected_kinds.iter();
                 assert!(matches!(
                     expected_tokens.next().unwrap(),
-                    // expecte eop in case of two many braces on left
+                    // expected eop in case of two many braces on left
                     TokenKind::Symbol(Symbol::CheckEquality)
                 ));
                 assert!(matches!(
                     expected_tokens.next().unwrap(),
-                    // expecte eop in case of two many braces on left
+                    // expected eop in case of two many braces on left
                     TokenKind::Symbol(Symbol::CheckInequality)
                 ));
                 assert!(parse_error
@@ -806,7 +806,7 @@ mod parse_tests {
                 let mut expected_tokens = parse_error.expected_kinds.iter();
                 assert!(matches!(
                     expected_tokens.next().unwrap(),
-                    // expecte eop in case of two many braces on left
+                    // expected eop in case of two many braces on left
                     TokenKind::Symbol(Symbol::EndProgram)
                 ));
                 assert!(parse_error
