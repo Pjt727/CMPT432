@@ -101,7 +101,7 @@ where
         let first_child = root.children.first().unwrap();
         let root_block;
         match first_child {
-            NodeEnum::Production(production) => root_block=production.borrow(),
+            NodeEnum::Production(production) => root_block = production.borrow(),
             NodeEnum::Terminal(_) => panic!("Unexpected cst structure"),
         }
         self.add_subtree(root_block)
@@ -109,11 +109,21 @@ where
 
     fn add_subtree(&mut self, root: Ref<Production<'a>>) {
         for child in root.children.iter() {
-            let add_production = self.add_node(child);
+            let added_production = self.add_node(child);
+            match child {
+                NodeEnum::Production(production_strong) => {
+                    self.add_subtree(production_strong.borrow());
+                }
+                // do not need to add any more productions
+                NodeEnum::Terminal(_) => {}
+            }
+            if added_production {
+                self.up_root();
+            }
         }
     }
 
-    fn add_node(&mut self, node: &NodeEnum<'a>) -> bool{
+    fn add_node(&mut self, node: &NodeEnum<'a>) -> bool {
         let mut added_production = false;
         match node {
             NodeEnum::Production(production_strong) => {
@@ -135,9 +145,9 @@ where
                     ProductionRule::Boolval => todo!(),
                     ProductionRule::Intop => todo!(),
                     // productions just for the derivation
-                    _ => { added_production = false }
+                    _ => added_production = false,
                 }
-            },
+            }
             NodeEnum::Terminal(terminal) => match &terminal.kind {
                 TokenKind::Keyword(keyword) => match keyword {
                     Keyword::LoopOnTrue => todo!(),
@@ -154,15 +164,15 @@ where
                     Symbol::CheckEquality => todo!(),
                     Symbol::CheckInequality => todo!(),
                     // terminals just for parse
-                    Symbol::Addition => {}, // this one does not matter because all intop are
-                                            // addition
-                    Symbol::Assignment => {},
-                    Symbol::QuotatioinMark => {},
-                    Symbol::EndProgram => {},
-                    Symbol::OpenBlock => {},
-                    Symbol::CloseBlock => {},
-                    Symbol::OpenParenthesis => {},
-                    Symbol::CloseParenthesis => {},
+                    Symbol::Addition => {} // this one does not matter because all intop are
+                    // addition
+                    Symbol::Assignment => {}
+                    Symbol::QuotatioinMark => {}
+                    Symbol::EndProgram => {}
+                    Symbol::OpenBlock => {}
+                    Symbol::CloseBlock => {}
+                    Symbol::OpenParenthesis => {}
+                    Symbol::CloseParenthesis => {}
                 },
                 TokenKind::Digit(_) => self.add_terminal(terminal),
                 TokenKind::Char(char) => self.add_char(char.letter),
@@ -198,7 +208,7 @@ where
 
         self.last_production = Rc::downgrade(&new_production);
     }
-    
+
     fn add_terminal(&mut self, token: &'a Token) {
         let new_node = AbstractNodeEnum::Terminal(token);
         let production_weak = &self.last_production;
@@ -206,7 +216,7 @@ where
         let mut last_node = production_strong.borrow_mut();
         last_node.children.push(new_node);
     }
-    
+
     // expects last_production to be StringExpr
     fn add_char(&mut self, ch: char) {
         let temp_strong = &self.last_production.upgrade().unwrap();
@@ -214,10 +224,10 @@ where
         match &current_production.abstract_type {
             AbstractProductionType::StringExpr(current_string) => {
                 current_production.abstract_type = AbstractProductionType::StringExpr(
-                    current_string.to_string() + &ch.to_string());
-            },
-           _ => panic!("Expected last production to be string expr"),
+                    current_string.to_string() + &ch.to_string(),
+                );
+            }
+            _ => panic!("Expected last production to be string expr"),
         }
     }
-
 }
