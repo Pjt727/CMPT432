@@ -109,14 +109,16 @@ where
 
     fn add_subtree(&mut self, root: Ref<Production<'a>>) {
         for child in root.children.iter() {
-            self.add_node(child)
+            let add_production = self.add_node(child);
         }
     }
 
-    fn add_node(&mut self, node: &NodeEnum<'a>) {
+    fn add_node(&mut self, node: &NodeEnum<'a>) -> bool{
+        let mut added_production = false;
         match node {
             NodeEnum::Production(production_strong) => {
                 let production = production_strong.borrow();
+                added_production = true;
                 match production.rule {
                     ProductionRule::Block => todo!(),
                     ProductionRule::PrintStatement => todo!(),
@@ -133,7 +135,7 @@ where
                     ProductionRule::Boolval => todo!(),
                     ProductionRule::Intop => todo!(),
                     // productions just for the derivation
-                    _ => {}
+                    _ => { added_production = false }
                 }
             },
             NodeEnum::Terminal(terminal) => match &terminal.kind {
@@ -166,6 +168,7 @@ where
                 TokenKind::Char(char) => self.add_char(char.letter),
             },
         }
+        return added_production;
     }
 
     fn up_root(&mut self) {
