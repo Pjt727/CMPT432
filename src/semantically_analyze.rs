@@ -149,20 +149,21 @@ where
                 },
                 TokenKind::Id(_) => todo!(),
                 TokenKind::Symbol(symbol) => match symbol {
-                    Symbol::QuotatioinMark => todo!(),
                     Symbol::CheckEquality => todo!(),
                     Symbol::CheckInequality => todo!(),
                     // terminals just for parse
+                    Symbol::Addition => {}, // this one does not matter because all intop are
+                                            // addition
                     Symbol::Assignment => {},
-                    Symbol::Addition => {},
+                    Symbol::QuotatioinMark => {},
                     Symbol::EndProgram => {},
                     Symbol::OpenBlock => {},
                     Symbol::CloseBlock => {},
                     Symbol::OpenParenthesis => {},
                     Symbol::CloseParenthesis => {},
                 },
-                TokenKind::Digit(_) => todo!(),
-                TokenKind::Char(char) => self.bubble_char_up(char.letter),
+                TokenKind::Digit(_) => self.add_terminal(terminal),
+                TokenKind::Char(char) => self.add_char(char.letter),
             },
         }
     }
@@ -203,8 +204,17 @@ where
         last_node.children.push(new_node);
     }
     
-    fn bubble_char_up(&mut self, ch: char) {
-        todo!()
+    // expects last_production to be StringExpr
+    fn add_char(&mut self, ch: char) {
+        let temp_strong = &self.last_production.upgrade().unwrap();
+        let mut current_production = temp_strong.borrow_mut();
+        match &current_production.abstract_type {
+            AbstractProductionType::StringExpr(current_string) => {
+                current_production.abstract_type = AbstractProductionType::StringExpr(
+                    current_string.to_string() + &ch.to_string());
+            },
+           _ => panic!("Expected last production to be string expr"),
+        }
     }
 
 }
