@@ -78,7 +78,7 @@ where
             parent: None,
         }));
 
-        let ast = AbstractSyntaxTree {
+        let mut ast = AbstractSyntaxTree {
             root: Ok(root_node.clone()),
             last_production: Rc::downgrade(&root_node),
             marker: PhantomData,
@@ -118,29 +118,25 @@ where
             NodeEnum::Production(production_strong) => {
                 let production = production_strong.borrow();
                 match production.rule {
-                    ProductionRule::Program => todo!(),
                     ProductionRule::Block => todo!(),
-                    ProductionRule::StatementList => todo!(),
-                    ProductionRule::Statement => todo!(),
                     ProductionRule::PrintStatement => todo!(),
                     ProductionRule::AssignmentStatement => todo!(),
                     ProductionRule::VarDecl => todo!(),
                     ProductionRule::WhileStatement => todo!(),
                     ProductionRule::IfStatement => todo!(),
-                    ProductionRule::Expr => todo!(),
                     ProductionRule::IntExpr => todo!(),
                     ProductionRule::StringExpr => todo!(),
                     ProductionRule::BooleanExpr => todo!(),
                     ProductionRule::Id => todo!(),
                     ProductionRule::CharList => todo!(),
-                    ProductionRule::Type => todo!(),
-                    ProductionRule::Char => todo!(),
                     ProductionRule::Boolop => todo!(),
                     ProductionRule::Boolval => todo!(),
                     ProductionRule::Intop => todo!(),
+                    // productions just for the derivation
+                    _ => {}
                 }
             },
-            NodeEnum::Terminal(terminal) => match terminal.kind {
+            NodeEnum::Terminal(terminal) => match &terminal.kind {
                 TokenKind::Keyword(keyword) => match keyword {
                     Keyword::LoopOnTrue => todo!(),
                     Keyword::If => todo!(),
@@ -153,24 +149,61 @@ where
                 },
                 TokenKind::Id(_) => todo!(),
                 TokenKind::Symbol(symbol) => match symbol {
-                    Symbol::OpenBlock => todo!(),
-                    Symbol::CloseBlock => todo!(),
-                    Symbol::OpenParenthesis => todo!(),
-                    Symbol::CloseParenthesis => todo!(),
                     Symbol::QuotatioinMark => todo!(),
-                    Symbol::Assignment => todo!(),
                     Symbol::CheckEquality => todo!(),
                     Symbol::CheckInequality => todo!(),
-                    Symbol::Addition => todo!(),
-                    Symbol::EndProgram => todo!(),
+                    // terminals just for parse
+                    Symbol::Assignment => {},
+                    Symbol::Addition => {},
+                    Symbol::EndProgram => {},
+                    Symbol::OpenBlock => {},
+                    Symbol::CloseBlock => {},
+                    Symbol::OpenParenthesis => {},
+                    Symbol::CloseParenthesis => {},
                 },
                 TokenKind::Digit(_) => todo!(),
-                TokenKind::Char(ch) => self.bubble_char_up(ch),
+                TokenKind::Char(char) => self.bubble_char_up(char.letter),
             },
         }
     }
+
+    fn up_root(&mut self) {
+        if let Err(_) = self.root {
+            return;
+        }
+        let last_production_weak = &self.last_production;
+        let last_production_strong = last_production_weak.upgrade().unwrap();
+        let last_production = last_production_strong.borrow();
+        match &last_production.parent {
+            Some(parent) => self.last_production = parent.clone(),
+            None => panic!("cannot uproot when there is no parent"),
+        }
+    }
+
+    fn add_production(&mut self, abstract_type: AbstractProductionType) {
+        let new_production = Rc::new(RefCell::new(AbstractProduction {
+            abstract_type,
+            children: vec![],
+            parent: Some(self.last_production.clone()),
+        }));
+        let production_weak = &self.last_production;
+        let production_strong = production_weak.upgrade().unwrap();
+        let mut last_node = production_strong.borrow_mut();
+        let new_node = AbstractNodeEnum::AbstractProduction(new_production.clone());
+        last_node.children.push(new_node);
+
+        self.last_production = Rc::downgrade(&new_production);
+    }
     
-    fn bubble_char_up(&mut self, ch: Char) {
+    fn add_terminal(&mut self, token: &'a Token) {
+        let new_node = AbstractNodeEnum::Terminal(token);
+        let production_weak = &self.last_production;
+        let production_strong = production_weak.upgrade().unwrap();
+        let mut last_node = production_strong.borrow_mut();
+        last_node.children.push(new_node);
+    }
+    
+    fn bubble_char_up(&mut self, ch: char) {
         todo!()
     }
 
