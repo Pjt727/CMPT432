@@ -24,7 +24,6 @@ enum AbstractProductionType {
     StringExpr(String), // sort of a mismatch because string expr will have no children but whtever
     BooleanExpr,
     Boolop(Token),
-    Boolval,
 }
 
 impl fmt::Display for AbstractProductionType {
@@ -44,7 +43,6 @@ impl fmt::Display for AbstractProductionType {
             AbstractProductionType::Boolop(token) => {
                 write!(f, "Boolean Operation {}", token.representation)
             }
-            AbstractProductionType::Boolval => write!(f, "Boolean Value"),
         }
     }
 }
@@ -64,7 +62,9 @@ struct AbstractProduction<'a> {
 pub struct AbstractSyntaxTree<'a, T> {
     root: Result<Rc<RefCell<AbstractProduction<'a>>>, SematincError>,
     last_production: Weak<RefCell<AbstractProduction<'a>>>,
-    marker: PhantomData<T>, // only to make the compiler happy ig, there must be a better way
+    // only to make the compiler happy ig, but I think the documentation does make me think
+    //     this is the correct pattern
+    marker: PhantomData<T>,
 }
 
 impl<'a, T> AbstractSyntaxTree<'a, T>
@@ -130,39 +130,45 @@ where
                 let production = production_strong.borrow();
                 added_production = true;
                 match production.rule {
-                    ProductionRule::Block => todo!(),
-                    ProductionRule::PrintStatement => todo!(),
-                    ProductionRule::AssignmentStatement => todo!(),
-                    ProductionRule::VarDecl => todo!(),
-                    ProductionRule::WhileStatement => todo!(),
-                    ProductionRule::IfStatement => todo!(),
-                    ProductionRule::IntExpr => todo!(),
-                    ProductionRule::StringExpr => todo!(),
-                    ProductionRule::BooleanExpr => todo!(),
-                    ProductionRule::Id => todo!(),
-                    ProductionRule::CharList => todo!(),
-                    ProductionRule::Boolop => todo!(),
-                    ProductionRule::Boolval => todo!(),
-                    ProductionRule::Intop => todo!(),
+                    ProductionRule::Block => self.add_production(AbstractProductionType::Block),
+                    ProductionRule::PrintStatement => {
+                        self.add_production(AbstractProductionType::PrintStatement)
+                    }
+                    ProductionRule::AssignmentStatement => {
+                        self.add_production(AbstractProductionType::AssignmentStatement)
+                    }
+                    ProductionRule::VarDecl => self.add_production(AbstractProductionType::VarDecl),
+                    ProductionRule::WhileStatement => {
+                        self.add_production(AbstractProductionType::WhileStatement)
+                    }
+                    ProductionRule::IfStatement => {
+                        self.add_production(AbstractProductionType::IfStatement)
+                    }
+
+                    // Int expression are alwasy just addition
+                    ProductionRule::IntExpr => self.add_production(AbstractProductionType::Add),
+                    ProductionRule::StringExpr => {
+                        self.add_production(AbstractProductionType::StringExpr("".to_string()))
+                    }
+                    ProductionRule::BooleanExpr => {
+                        self.add_production(AbstractProductionType::BooleanExpr)
+                    }
+                    ProductionRule::Id => self.add_production(AbstractProductionType::Block),
+                    ProductionRule::CharList => self.add_production(AbstractProductionType::Block),
+                    ProductionRule::Boolop => self.add_production(AbstractProductionType::Block),
+                    ProductionRule::Boolval => self.add_production(AbstractProductionType::Block),
                     // productions just for the derivation
                     _ => added_production = false,
                 }
             }
+            // I choose to be explicit here to see all the terminals I am not adding
             NodeEnum::Terminal(terminal) => match &terminal.kind {
-                TokenKind::Keyword(keyword) => match keyword {
-                    Keyword::LoopOnTrue => todo!(),
-                    Keyword::If => todo!(),
-                    Keyword::Boolean => todo!(),
-                    Keyword::String => todo!(),
-                    Keyword::Int => todo!(),
-                    Keyword::True => todo!(),
-                    Keyword::False => todo!(),
-                    Keyword::Print => todo!(),
-                },
-                TokenKind::Id(_) => todo!(),
+                // all keywords can just get add as is
+                TokenKind::Keyword(_) => self.add_terminal(terminal),
+                TokenKind::Id(_) => self.add_terminal(terminal),
                 TokenKind::Symbol(symbol) => match symbol {
-                    Symbol::CheckEquality => todo!(),
-                    Symbol::CheckInequality => todo!(),
+                    Symbol::CheckEquality => self.add_terminal(terminal),
+                    Symbol::CheckInequality => self.add_terminal(terminal),
                     // terminals just for parse
                     Symbol::Addition => {} // this one does not matter because all intop are
                     // addition
