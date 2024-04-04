@@ -60,7 +60,7 @@ struct AbstractProduction<'a> {
 }
 
 pub struct AbstractSyntaxTree<'a, T> {
-    root: Result<Rc<RefCell<AbstractProduction<'a>>>, SematincError>,
+    root: Rc<RefCell<AbstractProduction<'a>>>,
     last_production: Weak<RefCell<AbstractProduction<'a>>>,
     // only to make the compiler happy ig, but I think the documentation does make me think
     //     this is the correct pattern
@@ -79,7 +79,7 @@ where
         }));
 
         let mut ast = AbstractSyntaxTree {
-            root: Ok(root_node.clone()),
+            root: root_node.clone(),
             last_production: Rc::downgrade(&root_node),
             marker: PhantomData,
         };
@@ -145,7 +145,7 @@ where
                         self.add_production(AbstractProductionType::IfStatement)
                     }
 
-                    // Int expression are alwasy just addition
+                    // Int expression are always just addition
                     ProductionRule::IntExpr => self.add_production(AbstractProductionType::Add),
                     ProductionRule::StringExpr => {
                         self.add_production(AbstractProductionType::StringExpr("".to_string()))
@@ -188,9 +188,6 @@ where
     }
 
     fn up_root(&mut self) {
-        if let Err(_) = self.root {
-            return;
-        }
         let last_production_weak = &self.last_production;
         let last_production_strong = last_production_weak.upgrade().unwrap();
         let last_production = last_production_strong.borrow();
