@@ -3,6 +3,7 @@ use crate::parse::*;
 use crate::token::*;
 use colored::Colorize;
 use std::cell::Ref;
+use std::collections::HashMap;
 use std::fmt;
 use std::marker::PhantomData;
 use std::{cell::RefCell, rc::Rc, rc::Weak};
@@ -303,10 +304,27 @@ where
     }
 }
 
+enum DataType {
+    Int,
+    String,
+    Bool,
+}
+
+// is_init is not included bc there would just be an error if the variable not found
 struct Variable<'a> {
     token: &'a Token,
-    scope: Vec<u8>, // represents the path of a variable down the tree
+    // represents the path of a variable down the tree could be used to check scope
+    // in a flat way
+    scope: Vec<u8>,
+    is_used: bool,
+    data_type: DataType,
 }
+
+struct BlockNode<'a> {
+    // in this case I would usually not use a ha
+    variables: HashMap<char, Variable<'a>>,
+}
+struct ScopeTree {}
 
 #[cfg(test)]
 mod semantic_tests {
