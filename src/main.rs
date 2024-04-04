@@ -66,7 +66,7 @@ fn compile_steps(file: &Path) {
             let cst = parse::ConcreteSyntaxTree::new(tokens.iter());
             cst.show_parse_steps();
             println!();
-            cst.show_cst();
+            cst.show();
         } else {
             println!(
                 "{} with {} Fatal Error(s) and {} Warning(s)",

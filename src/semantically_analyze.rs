@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use colored::Colorize;
 use crate::parse::*;
 use crate::token::*;
 use std::cell::Ref;
@@ -22,7 +23,6 @@ enum AbstractProductionType {
     IfStatement,
     Add,                // Would need change to same way boolop is implemented for other intops
     StringExpr(String), // sort of a mismatch because string expr will have no children but whtever
-    BooleanExpr,
     Boolop(Token),
 }
 
@@ -37,9 +37,8 @@ impl fmt::Display for AbstractProductionType {
             AbstractProductionType::IfStatement => write!(f, "If Statement"),
             AbstractProductionType::Add => write!(f, "Add"),
             AbstractProductionType::StringExpr(expression) => {
-                write!(f, "String Expression {}", expression)
+                write!(f, "String Expression \"{}\"", expression)
             }
-            AbstractProductionType::BooleanExpr => write!(f, "Boolean Expression"),
             AbstractProductionType::Boolop(token) => {
                 write!(f, "Boolean Operation {}", token.representation)
             }
@@ -153,8 +152,6 @@ where
                     ProductionRule::BooleanExpr => {
                         self.add_production(AbstractProductionType::BooleanExpr)
                     }
-                    ProductionRule::Id => self.add_production(AbstractProductionType::Block),
-                    ProductionRule::CharList => self.add_production(AbstractProductionType::Block),
                     ProductionRule::Boolop => self.add_production(AbstractProductionType::Block),
                     ProductionRule::Boolval => self.add_production(AbstractProductionType::Block),
                     // productions just for the derivation
@@ -164,7 +161,19 @@ where
             // I choose to be explicit here to see all the terminals I am not adding
             NodeEnum::Terminal(terminal) => match &terminal.kind {
                 // all keywords can just get add as is
-                TokenKind::Keyword(_) => self.add_terminal(terminal),
+                TokenKind::Keyword(keyword) => {
+                    match keyword {
+                        Keyword::Boolean => self.add_terminal(terminal),
+                        Keyword::String => self.add_terminal(terminal),
+                        Keyword::Int => self.add_terminal(terminal),
+                        Keyword::True => self.add_terminal(terminal),
+                        Keyword::False => self.add_terminal(terminal),
+                        // gotten through the statements
+                        Keyword::LoopOnTrue => {}
+                        Keyword::If => {}
+                        Keyword::Print => {}
+                    }
+                },
                 TokenKind::Id(_) => self.add_terminal(terminal),
                 TokenKind::Symbol(symbol) => match symbol {
                     Symbol::CheckEquality => self.add_terminal(terminal),
@@ -198,6 +207,8 @@ where
     }
 
     fn add_production(&mut self, abstract_type: AbstractProductionType) {
+        println!();
+        println!("adding {}", &abstract_type);
         let new_production = Rc::new(RefCell::new(AbstractProduction {
             abstract_type,
             children: vec![],
@@ -205,32 +216,135 @@ where
         }));
         let production_weak = &self.last_production;
         let production_strong = production_weak.upgrade().unwrap();
-        let mut last_node = production_strong.borrow_mut();
+        let mut last_production = production_strong.borrow_mut();
         let new_node = AbstractNodeEnum::AbstractProduction(new_production.clone());
-        last_node.children.push(new_node);
-
+        last_production.children.push(new_node);
         self.last_production = Rc::downgrade(&new_production);
+        println!("to {}", last_production.abstract_type);
+        println!();
     }
 
     fn add_terminal(&mut self, token: &'a Token) {
+        println!();
+        println!("adding {}", token.representation);
         let new_node = AbstractNodeEnum::Terminal(token);
         let production_weak = &self.last_production;
         let production_strong = production_weak.upgrade().unwrap();
-        let mut last_node = production_strong.borrow_mut();
-        last_node.children.push(new_node);
+        let mut last_production = production_strong.borrow_mut();
+        println!("to {}", last_production.abstract_type);
+        println!();
+        last_production.children.push(new_node);
     }
 
     // expects last_production to be StringExpr
     fn add_char(&mut self, ch: char) {
         let temp_strong = &self.last_production.upgrade().unwrap();
-        let mut current_production = temp_strong.borrow_mut();
-        match &current_production.abstract_type {
+        let mut last_production = temp_strong.borrow_mut();
+        println!("add ch {} to {} ", &ch, last_production.abstract_type);
+        match &last_production.abstract_type {
             AbstractProductionType::StringExpr(current_string) => {
-                current_production.abstract_type = AbstractProductionType::StringExpr(
+                last_production.abstract_type = AbstractProductionType::StringExpr(
                     current_string.to_string() + &ch.to_string(),
                 );
             }
             _ => panic!("Expected last production to be string expr"),
         }
+    }
+
+    fn add_bool_val(&mut self, boolean: bool) {
+    }
+
+    pub fn show(&self) {
+        let root_mut = self.root.borrow_mut();
+        let node_enum = &root_mut.children;
+        println!("<{}>", root_mut.abstract_type);
+        self.traverse(node_enum, 1);
+    }
+
+    fn traverse(&self, children: &Vec<AbstractNodeEnum<'a>>, depth: usize) {
+        let indent = "-".repeat(depth);
+        for child in children {
+            match child {
+                AbstractNodeEnum::AbstractProduction(p) => {
+                    let p_mut = p.borrow_mut();
+                    println!("{}<{}>", indent.blue(), p_mut.abstract_type);
+                    self.traverse(&p_mut.children, depth + 1);
+                }
+                AbstractNodeEnum::Terminal(t) => {
+                    println!("{}[{}]", indent.blue(), t.representation)
+                },
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod semantic_tests {
+    use super::*;
+    use crate::lex::*;
+    use std::path::Path;
+    use std::slice::Iter;
+
+    // I should have never used generics :(
+    fn helper_get_tokens(path_str: &str) -> Vec<Token> {
+        let path = Path::new(&path_str);
+        let lexemes = get_lexemes(path);
+        let mut tokens = vec![];
+        for lexeme in lexemes {
+            match lexeme {
+                Ok(token) => tokens.push(token),
+                Err(lex_problem) => match lex_problem {
+                    LexProblem::LexError(_) => panic!("Error during lex!!"),
+                    LexProblem::LexWarning(_) => continue,
+                },
+            }
+        }
+        return tokens;
+    }
+    fn helper_get_cst<'a>(tokens: Iter<'a, Token>) -> ConcreteSyntaxTree<'a, Iter<'a, Token>> 
+    {
+        let cst = ConcreteSyntaxTree::new(tokens);
+        cst.show_parse_steps();
+        cst.show();
+        if cst.is_err() {
+            panic!("Error duing parse!!");
+        }
+        return cst;
+    }
+
+    #[test]
+    fn hello_semantic_analysis() {
+        // file: {}$
+        let path_str = "test_cases/general/hello-compiler";
+        let tokens = helper_get_tokens(path_str);
+        let cst = helper_get_cst(tokens.iter());
+        let ast = AbstractSyntaxTree::new(cst);
+        println!("Showing AST:");
+        println!();
+        ast.show();
+    }
+
+    #[test]
+    fn genernal_semantics() {
+        // file: {}$
+        let path_str = "test_cases/general/lex-with-spaces-no-comments";
+        let tokens = helper_get_tokens(path_str);
+        let cst = helper_get_cst(tokens.iter());
+        let ast = AbstractSyntaxTree::new(cst);
+        println!("Showing AST:");
+        println!();
+        ast.show();
+    }
+
+    #[test]
+    fn string_semantics() {
+        // file: {}$
+        let path_str = "test_cases/semantic-edge-cases/combine-chars";
+        let tokens = helper_get_tokens(path_str);
+        let cst = helper_get_cst(tokens.iter());
+        let ast = AbstractSyntaxTree::new(cst);
+        println!("Showing AST:");
+        println!();
+        ast.show();
     }
 }

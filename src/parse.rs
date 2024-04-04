@@ -105,6 +105,13 @@ where
         return cst;
     }
 
+    pub fn is_err(&self) -> bool {
+        match self.root {
+            Ok(_) => false,
+            Err(_) => true,
+        }
+    }
+
     pub fn show_parse_steps(&self) {
         static INFO_TEXT: &str = "DEBUG INFO parse:";
         static ERROR_TEXT: &str = "DEBUG ERROR parse:";
@@ -145,7 +152,7 @@ where
         }
     }
 
-    pub fn show_cst(&self) {
+    pub fn show(&self) {
         static ERROR_TEXT: &str = "DEBUG ERROR parse:";
         static INFO_TEXT: &str = "Successfully parsed";
         let root = match &self.root {
@@ -161,10 +168,10 @@ where
         let root_mut = root.borrow_mut();
         let node_enum = &root_mut.children;
         println!("<{}>", root_mut.rule);
-        self.traverse_cst(node_enum, 1);
+        self.traverse(node_enum, 1);
     }
 
-    fn traverse_cst(&self, children: &Vec<NodeEnum<'a>>, depth: usize) {
+    fn traverse(&self, children: &Vec<NodeEnum<'a>>, depth: usize) {
         let indent = "-".repeat(depth);
         for child in children {
             match child {
@@ -175,7 +182,7 @@ where
                     //    are not displayed
                     if !p_mut.children.is_empty() {
                         println!("{}<{}>", indent.blue(), p_mut.rule);
-                        self.traverse_cst(&p_mut.children, depth + 1);
+                        self.traverse(&p_mut.children, depth + 1);
                     }
                 }
                 NodeEnum::Terminal(t) => {
@@ -660,7 +667,7 @@ mod parse_tests {
 
         let cst = ConcreteSyntaxTree::new(tokens.iter());
         cst.show_parse_steps();
-        cst.show_cst();
+        cst.show();
         match cst.root {
             Ok(_) => {}
             Err(_) => {
@@ -702,7 +709,7 @@ mod parse_tests {
 
         let cst = ConcreteSyntaxTree::new(tokens.iter());
         cst.show_parse_steps();
-        cst.show_cst();
+        cst.show();
         match cst.root {
             Ok(_) => panic!("Expected error found root!!"),
             Err(parse_error) => {
@@ -737,7 +744,7 @@ mod parse_tests {
 
         let cst = ConcreteSyntaxTree::new(tokens.iter());
         cst.show_parse_steps();
-        cst.show_cst();
+        cst.show();
         match cst.root {
             Ok(_) => panic!("Expected error found root!!"),
             Err(parse_error) => {
@@ -799,7 +806,7 @@ mod parse_tests {
 
         let cst = ConcreteSyntaxTree::new(tokens.iter());
         cst.show_parse_steps();
-        cst.show_cst();
+        cst.show();
         match cst.root {
             Ok(_) => panic!("Expected error found root!!"),
             Err(parse_error) => {
