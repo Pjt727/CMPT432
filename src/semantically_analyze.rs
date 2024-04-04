@@ -149,11 +149,17 @@ where
                     ProductionRule::StringExpr => {
                         self.add_production(AbstractProductionType::StringExpr("".to_string()))
                     }
+                    // boolean expression shall store the operation ( == != )
                     ProductionRule::BooleanExpr => {
-                        self.add_production(AbstractProductionType::BooleanExpr)
+                        // have to add a dummy token that will be overwritten
+                        let dummy_token = Token { 
+                            kind: TokenKind::Char(Char { letter: 'x' }),
+                            start_end_position: (0, 0),
+                            line: 0,
+                            representation: "x".to_string() 
+                        };
+                        self.add_production(AbstractProductionType::Boolop(dummy_token));
                     }
-                    ProductionRule::Boolop => self.add_production(AbstractProductionType::Block),
-                    ProductionRule::Boolval => self.add_production(AbstractProductionType::Block),
                     // productions just for the derivation
                     _ => added_production = false,
                 }
