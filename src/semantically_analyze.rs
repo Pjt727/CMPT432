@@ -1,7 +1,7 @@
 #![allow(dead_code)]
-use colored::Colorize;
 use crate::parse::*;
 use crate::token::*;
+use colored::Colorize;
 use std::cell::Ref;
 use std::fmt;
 use std::marker::PhantomData;
@@ -145,18 +145,18 @@ where
                     }
 
                     // Int expression are always just addition
-                    ProductionRule::IntExpr => self.add_production(AbstractProductionType::Add),
+                    ProductionRule::IntExpr => added_production = self.add_int_expr(production),
                     ProductionRule::StringExpr => {
                         self.add_production(AbstractProductionType::StringExpr("".to_string()))
                     }
                     // boolean expression shall store the operation ( == != )
                     ProductionRule::BooleanExpr => {
                         // have to add a dummy token that will be overwritten
-                        let dummy_token = Token { 
+                        let dummy_token = Token {
                             kind: TokenKind::Char(Char { letter: 'x' }),
                             start_end_position: (0, 0),
                             line: 0,
-                            representation: "x".to_string() 
+                            representation: "x".to_string(),
                         };
                         self.add_production(AbstractProductionType::Boolop(dummy_token));
                     }
@@ -179,11 +179,11 @@ where
                         Keyword::If => {}
                         Keyword::Print => {}
                     }
-                },
+                }
                 TokenKind::Id(_) => self.add_terminal(terminal),
                 TokenKind::Symbol(symbol) => match symbol {
-                    Symbol::CheckEquality => self.add_terminal(terminal),
-                    Symbol::CheckInequality => self.add_terminal(terminal),
+                    Symbol::CheckEquality => self.add_boolop(terminal),
+                    Symbol::CheckInequality => self.add_boolop(terminal),
                     // terminals just for parse
                     Symbol::Addition => {} // this one does not matter because all intop are
                     // addition
@@ -257,7 +257,26 @@ where
         }
     }
 
-    fn add_bool_val(&mut self, boolean: bool) {
+    fn add_boolop(&mut self, token: &'a Token) {
+        let temp_strong = &self.last_production.upgrade().unwrap();
+        let mut current_production = temp_strong.borrow_mut();
+        match &current_production.abstract_type {
+            AbstractProductionType::Boolop(__dummy_token) => {
+                current_production.abstract_type = AbstractProductionType::Boolop(token.clone());
+            }
+            _ => panic!("Expected last production to be boolop"),
+        }
+    }
+
+    // int expr should be an int op (in this case always add) if
+    //    the int expr has more than one child
+    // this is because int op expr can be digit or digit + expr
+    fn add_int_expr(&mut self, production: Ref<Production>) -> bool {
+        if production.children.len() == 1 {
+            return false;
+        }
+        self.add_production(AbstractProductionType::Add);
+        return true;
     }
 
     pub fn show(&self) {
@@ -278,10 +297,15 @@ where
                 }
                 AbstractNodeEnum::Terminal(t) => {
                     println!("{}[{}]", indent.blue(), t.representation)
-                },
+                }
             }
         }
     }
+}
+
+struct Variable<'a> {
+    token: &'a Token,
+    scope: Vec<u8>, // represents the path of a variable down the tree
 }
 
 #[cfg(test)]
@@ -307,8 +331,7 @@ mod semantic_tests {
         }
         return tokens;
     }
-    fn helper_get_cst<'a>(tokens: Iter<'a, Token>) -> ConcreteSyntaxTree<'a, Iter<'a, Token>> 
-    {
+    fn helper_get_cst<'a>(tokens: Iter<'a, Token>) -> ConcreteSyntaxTree<'a, Iter<'a, Token>> {
         let cst = ConcreteSyntaxTree::new(tokens);
         cst.show_parse_steps();
         cst.show();
@@ -331,7 +354,7 @@ mod semantic_tests {
     }
 
     #[test]
-    fn genernal_semantics() {
+    fn general_semantics() {
         // file: {}$
         let path_str = "test_cases/general/lex-with-spaces-no-comments";
         let tokens = helper_get_tokens(path_str);
