@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 use crate::parse::*;
 use crate::token::*;
-use std::ptr;
 use colored::Colorize;
 use std::cell::Ref;
 use std::collections::HashMap;
@@ -215,8 +214,6 @@ where
     }
 
     fn add_production(&mut self, abstract_type: AbstractProductionType) {
-        println!();
-        println!("adding {}", &abstract_type);
         let new_production = Rc::new(RefCell::new(AbstractProduction {
             abstract_type,
             children: vec![],
@@ -228,19 +225,13 @@ where
         let new_node = AbstractNodeEnum::AbstractProduction(new_production.clone());
         last_production.children.push(new_node);
         self.last_production = Rc::downgrade(&new_production);
-        println!("to {}", last_production.abstract_type);
-        println!();
     }
 
     fn add_terminal(&mut self, token: &'a Token) {
-        println!();
-        println!("adding {}", token.representation);
         let new_node = AbstractNodeEnum::Terminal(token);
         let production_weak = &self.last_production;
         let production_strong = production_weak.upgrade().unwrap();
         let mut last_production = production_strong.borrow_mut();
-        println!("to {}", last_production.abstract_type);
-        println!();
         last_production.children.push(new_node);
     }
 
@@ -248,7 +239,6 @@ where
     fn add_char(&mut self, ch: char) {
         let temp_strong = &self.last_production.upgrade().unwrap();
         let mut last_production = temp_strong.borrow_mut();
-        println!("add ch {} to {} ", &ch, last_production.abstract_type);
         match &last_production.abstract_type {
             AbstractProductionType::StringExpr(current_string) => {
                 last_production.abstract_type = AbstractProductionType::StringExpr(
@@ -321,6 +311,7 @@ struct RedeclarationError<'a> {
 struct Variable<'a> {
     token: &'a Token,
     references: Vec<Reference<'a>>,
+    is_init: bool,
     is_used: bool,
     data_type: &'a Token,
 }
@@ -349,7 +340,7 @@ impl<'a, T> ScopeTree<'a, T>
 where
     T: Iterator<Item = &'a Token>,
 {
-    pub fn new(ast: &AbstractSyntaxTree<T>) -> Self {
+    pub fn new(ast: &AbstractSyntaxTree<'a, T>) -> Self {
         let root_node = Rc::new(RefCell::new(Scope {
             variables: HashMap::new(),
             children: vec![],
@@ -357,7 +348,7 @@ where
             flat_scopes: vec![0],
         }));
 
-        let scope_tree = ScopeTree {
+        let mut scope_tree = ScopeTree {
             current_scope: Rc::downgrade(&root_node),
             root: root_node,
             undeclared_references: vec![],
@@ -365,6 +356,8 @@ where
             marker: PhantomData
         };
 
+        let mut first_scopes: Vec<u8> = vec![0, 0];
+        scope_tree.add_variables_in_scope(ast.root.clone(), &mut first_scopes, true);
         return scope_tree;
     }
 
@@ -375,7 +368,7 @@ where
         include_as_used: bool,
         ) 
     {
-        let start_production = start_production_strong.borrow_mut();
+        let start_production = start_production_strong.borrow();
         for child in &start_production.children {
             let production_strong = match child {
                 AbstractNodeEnum::AbstractProduction(p) => p,
@@ -387,7 +380,7 @@ where
                     _ => continue,
                 },
             };
-            let production = production_strong.borrow_mut();
+            let production = production_strong.borrow();
             match production.abstract_type {
                 AbstractProductionType::Block => {
                     // create a new scope owner for this scope and all siblings
@@ -430,13 +423,40 @@ where
                         data_type: variable_type,
                         references: vec![],
                         is_used: false,
+                        is_init: false,
                     });
                 }
                 AbstractProductionType::AssignmentStatement => {
+                    let inited_node = production.children.first().unwrap();
+                    let inited_token = match inited_node {
+                        AbstractNodeEnum::Terminal(t) => t,
+                        AbstractNodeEnum::AbstractProduction(_) => panic!("expected id token"),
+                    };
+                    self.init_variable(&self.current_scope.clone(), inited_token);
                     self.add_variables_in_scope(production_strong.clone(), scopes, false)
                 }
                 _ => self.add_variables_in_scope(production_strong.clone(), scopes, true),
             }
+        }
+    }
+
+    fn init_variable(&mut self, scope: &Weak<RefCell<Scope<'a>>>, token: &'a Token) {
+        let name = match &token.kind {
+            TokenKind::Id(id) => id.name,
+            _ => panic!("expected id"),
+        };
+        let running_scope_weak = scope;// only should happen on the first
+        let running_scope_strong = running_scope_weak.upgrade().unwrap();
+        let mut running_scope = running_scope_strong.borrow_mut();
+        if let Some(variable) = running_scope.variables.get_mut(&name) {
+            // dont add it as a reference her because it will be added later
+            variable.is_init = true;
+        } else {
+            let reference = Reference { 
+                scope: scope.clone(),
+                token,
+            };
+            self.undeclared_references.push(reference);
         }
     }
 
@@ -502,6 +522,39 @@ where
         self.current_scope = Rc::downgrade(&new_scope_ref);
         last_scope.children.push(new_scope_ref);
     }
+
+    fn show(&self) {
+        println!("Displaying the symbol table of declared variables");
+        println!(" NAME TYPE        INITED?  USED?  SCOPE");
+        ScopeTree::<T>::show_self_children(&self.root);
+    }
+
+    fn show_self_children(scope_strong: &Rc<RefCell<Scope<'a>>>) {
+        let col_width1 = 5;
+        let col_width2 = 12;
+        let col_width3 = 9;
+        let col_width4 = 7;
+        let col_width5 = 6;
+
+        let scope = scope_strong.borrow();
+
+        for variable in scope.variables.values() {
+            print!("[");
+            print!("{name:<col_width1$}", name=variable.token.representation);
+            print!("{is_init:<col_width2$}", is_init=variable.data_type.representation);
+            print!("{is_init:<col_width3$}", is_init=variable.is_init);
+            print!("{is_used:<col_width4$}", is_used=variable.is_used);
+            let joined_scopes = scope.flat_scopes.iter()
+                .map(|&num| num.to_string())
+                .collect::<Vec<String>>()
+                .join(".");
+            print!("{scope:<col_width5$}", scope=joined_scopes);
+            println!("]");
+        }
+        for child_scope in scope.children.iter() {
+            ScopeTree::<T>::show_self_children(child_scope)
+        }
+    }
 }
 
 
@@ -545,9 +598,14 @@ mod semantic_tests {
         let tokens = helper_get_tokens(path_str);
         let cst = helper_get_cst(tokens.iter());
         let ast = AbstractSyntaxTree::new(cst);
+        let scope_tree = ScopeTree::new(&ast);
         println!("Showing AST:");
         println!();
         ast.show();
+        println!("Showing Scope table");
+        println!();
+        scope_tree.show();
+        
     }
 
     #[test]
@@ -557,9 +615,14 @@ mod semantic_tests {
         let tokens = helper_get_tokens(path_str);
         let cst = helper_get_cst(tokens.iter());
         let ast = AbstractSyntaxTree::new(cst);
+        let scope_tree = ScopeTree::new(&ast);
         println!("Showing AST:");
         println!();
         ast.show();
+        println!();
+        println!("Showing Scope table");
+        println!();
+        scope_tree.show();
     }
 
     #[test]
@@ -569,8 +632,12 @@ mod semantic_tests {
         let tokens = helper_get_tokens(path_str);
         let cst = helper_get_cst(tokens.iter());
         let ast = AbstractSyntaxTree::new(cst);
+        let scope_tree = ScopeTree::new(&ast);
         println!("Showing AST:");
         println!();
         ast.show();
+        println!("Showing Scope table");
+        println!();
+        scope_tree.show();
     }
 }
