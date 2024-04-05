@@ -304,29 +304,36 @@ where
     }
 }
 
+struct Reference<'a> {
+    token: &'a Token,
+    scope: Weak<RefCell<Scope<'a>>>,
+}
+
 // is_init is not included bc there would just be an error if the variable not found
 struct Variable<'a> {
     token: &'a Token,
-    // represents the path of a variable down the tree could be used to check scope
-    // in a flat way
-    scopes: Vec<u8>,
+    references: Vec<Reference<'a>>,
     is_used: bool,
     data_type: &'a Token,
 }
 
-struct BlockNode<'a> {
+struct Scope<'a> {
     // A very simple perfect hash exists for char's and in our care
     //   we only would need to make 26 spots in the array to implement a perfect hash
     // I will still leave this as a HashMap type to make Alan happy though
     variables: HashMap<char, Variable<'a>>,
-    children: Vec<Rc<RefCell<BlockNode<'a>>>>,
-    parent: Option<Weak<RefCell<BlockNode<'a>>>>,
+    children: Vec<Rc<RefCell<Scope<'a>>>>,
+    parent: Option<Weak<RefCell<Scope<'a>>>>,
+    // represents the path of a variable down the tree could be used to check scope
+    // in a flat way
+    flat_scopes: Vec<u8>,
 }
 
 struct ScopeTree<'a, T> {
-    root: Rc<RefCell<BlockNode<'a>>>,
-    current_scope: Weak<RefCell<BlockNode<'a>>>,
-    marker: PhantomData<T> 
+    root: Rc<RefCell<Scope<'a>>>,
+    current_scope: Weak<RefCell<Scope<'a>>>,
+    undeclared_references: Vec<Reference<'a>>,
+    marker: PhantomData<T>,
 }
 
 impl<'a, T> ScopeTree<'a, T>
@@ -334,15 +341,17 @@ where
     T: Iterator<Item = &'a Token>,
 {
     pub fn new(ast: &AbstractSyntaxTree<T>) -> Self {
-        let root_node = Rc::new(RefCell::new(BlockNode {
+        let root_node = Rc::new(RefCell::new(Scope {
             variables: HashMap::new(),
             children: vec![],
             parent: None,
+            flat_scopes: vec![0],
         }));
 
         let scope_tree = ScopeTree {
             current_scope: Rc::downgrade(&root_node),
             root: root_node,
+            undeclared_references: vec![],
             marker: PhantomData
         };
 
@@ -352,14 +361,18 @@ where
     fn add_variables_in_scope(
         &mut self,
         start_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
-        scopes: &mut Vec<u8>) 
+        scopes: &mut Vec<u8>,
+        include_as_used: bool,
+        ) 
     {
-
         let start_production = start_production_strong.borrow_mut();
         for child in &start_production.children {
             let production_strong = match child {
                 AbstractNodeEnum::AbstractProduction(p) => p,
-                AbstractNodeEnum::Terminal(_) => continue,
+                AbstractNodeEnum::Terminal(t) => match &t.kind {
+                    TokenKind::Id(_) => todo!(),
+                    _ => continue,
+                },
             };
             let production = production_strong.borrow_mut();
             match production.abstract_type {
@@ -371,9 +384,9 @@ where
                     //    it needs to be... I am mananging instance state through side efffects 
                     //    and the state of recursive calls. could argue that it is better to simply
                     //    add a parameter current_node instead of having it instanced
-                    self.add_scope();
-                    self.add_variables_in_scope(production_strong.clone(), new_scopes);
-                    // increment the scope for the next block with the same scope owner
+                    self.add_scope(new_scopes);
+                    self.add_variables_in_scope(production_strong.clone(), new_scopes, true);
+                    // increment the scope for sibling scopes
                     let last_scope = scopes.last_mut().expect("scope list was empty??");
                     *last_scope += 1;
                 }
@@ -392,8 +405,8 @@ where
                         AbstractNodeEnum::AbstractProduction(_) => panic!("expected type"),
                     };
                     let variable_token = match var_children.next().unwrap() {
-                        AbstractNodeEnum::Terminal(t) => match t.kind {
-                            TokenKind::Id(id) => *t,
+                        AbstractNodeEnum::Terminal(t) => match &t.kind {
+                            TokenKind::Id(_) => *t,
                             _ => panic!("expected id")
                         },
                         AbstractNodeEnum::AbstractProduction(_) => panic!("expected id"),
@@ -401,20 +414,53 @@ where
  
                     self.add_variable(Variable {
                         token: variable_token,
-                        scopes: scopes.clone(),
-                        is_used: false,
                         data_type: variable_type,
+                        references: vec![],
+                        is_used: false,
                     });
                 }
-                _ => self.add_variables_in_scope(production_strong.clone(), scopes),
+                AbstractProductionType::AssignmentStatement => {
+                    self.add_variables_in_scope(production_strong.clone(), scopes, false)
+                }
+                _ => self.add_variables_in_scope(production_strong.clone(), scopes, true),
             }
+        }
+    }
+
+    fn use_variable(&mut self, scope: &Weak<RefCell<Scope<'a>>>, token: &'a Token, include_as_used: bool) {
+        let name = match &token.kind {
+            TokenKind::Id(id) => id.name,
+            _ => panic!("expected id"),
+        };
+
+        // look up the tree from the current position
+        let running_scope_weak = scope;// only should happen on the first
+        let running_scope_strong = running_scope_weak.upgrade().unwrap();
+        let mut running_scope = running_scope_strong.borrow_mut();
+        if let Some(variable) = running_scope.variables.get_mut(&name) {
+            if include_as_used { variable.is_used = true; }
+            let reference = Reference { 
+                token,
+                scope: scope.clone(),
+            };
+            variable.references.push(reference);
+            return;
+        }
+        if let Some(parent_scope_weak) = &running_scope.parent {
+            self.use_variable(parent_scope_weak, token, include_as_used);
+        } else {
+            let reference = Reference { 
+                scope: scope.clone(),
+                token,
+            };
+            self.undeclared_references.push(reference);
         }
     }
 
     fn add_variable(&mut self, variable: Variable<'a>) {
         let name = match &variable.token.kind {
             TokenKind::Id(id) => id.name,
-            _ => panic!("expected char"),
+            _ => panic!("expected id"),
         };
         let curret_scope_strong = self.current_scope.upgrade().unwrap();
         let mut current_scope = curret_scope_strong.borrow_mut();
@@ -424,14 +470,15 @@ where
         current_scope.variables.insert(name, variable);
     }
 
-    fn add_scope(&mut self) {
+    fn add_scope(&mut self, flat_scopes: &Vec<u8>) {
         let last_scope = &self.current_scope;
         let last_scope_strong = last_scope.upgrade().unwrap();
         let mut last_scope = last_scope_strong.borrow_mut();
-        let new_scope = BlockNode {
+        let new_scope = Scope {
+            parent: Some(Rc::downgrade(&last_scope_strong)),
             variables: HashMap::new(),
             children: vec![],
-            parent: Some(Rc::downgrade(&last_scope_strong)),
+            flat_scopes: flat_scopes.clone()
         };
         let new_scope_ref = Rc::new(RefCell::new(new_scope));
         self.current_scope = Rc::downgrade(&new_scope_ref);
