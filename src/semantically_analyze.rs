@@ -310,7 +310,7 @@ struct RedeclarationError<'a> {
 #[derive(Clone)]
 struct Variable<'a> {
     token: &'a Token,
-    references: Vec<Reference<'a>>,
+    right_of_assignment: Vec<&'a Token>,
     is_init: bool,
     is_used: bool,
     data_type: &'a Token,
@@ -331,8 +331,11 @@ struct Scope<'a> {
 struct ScopeTree<'a, T> {
     root: Rc<RefCell<Scope<'a>>>,
     current_scope: Weak<RefCell<Scope<'a>>>,
-    undeclared_references: Vec<Reference<'a>>,
+    // I was too lazy to do my errors as types
+    undeclared_references: Vec<&'a Token>,
+    uninitialized_reference: Vec<Reference<'a>>,
     redeclared_variables: Vec<RedeclarationError<'a>>,
+    right_of_assignment: Vec<&'a Token>,
     marker: PhantomData<T>,
 }
 
@@ -353,11 +356,13 @@ where
             root: root_node,
             undeclared_references: vec![],
             redeclared_variables: vec![],
+            uninitialized_reference: vec![],
+            right_of_assignment: vec![],
             marker: PhantomData
         };
 
         let mut first_scopes: Vec<u8> = vec![0, 0];
-        scope_tree.add_variables_in_scope(ast.root.clone(), &mut first_scopes, true);
+        scope_tree.add_variables_in_scope(ast.root.clone(), &mut first_scopes, false, false);
         return scope_tree;
     }
 
@@ -365,7 +370,8 @@ where
         &mut self,
         start_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
         scopes: &mut Vec<u8>,
-        include_as_used: bool,
+        in_assignment: bool,
+        skip_first_child: bool,
         ) 
     {
         let start_production = start_production_strong.borrow();
@@ -374,7 +380,7 @@ where
                 AbstractNodeEnum::AbstractProduction(p) => p,
                 AbstractNodeEnum::Terminal(t) => match &t.kind {
                     TokenKind::Id(_) => { 
-                        self.use_variable(&self.current_scope.clone(), t, include_as_used); 
+                        self.use_variable(&self.current_scope.clone(), t, in_assignment); 
                         continue 
                     }
                     _ => continue,
@@ -391,7 +397,8 @@ where
                     //    and the state of recursive calls. could argue that it is better to simply
                     //    add a parameter current_node instead of having it instanced
                     self.add_scope(new_scopes);
-                    self.add_variables_in_scope(production_strong.clone(), new_scopes, true);
+                    // safe to rest right of assignment because blocks cannot be in assignments
+                    self.add_variables_in_scope(production_strong.clone(), new_scopes, true, false);
                     // increment the scope for sibling scopes
                     let last_scope = scopes.last_mut().expect("scope list was empty??");
                     *last_scope += 1;
@@ -421,7 +428,7 @@ where
                     self.add_variable(Variable {
                         token: variable_token,
                         data_type: variable_type,
-                        references: vec![],
+                        right_of_assignment: vec![],
                         is_used: false,
                         is_init: false,
                     });
@@ -432,15 +439,28 @@ where
                         AbstractNodeEnum::Terminal(t) => t,
                         AbstractNodeEnum::AbstractProduction(_) => panic!("expected id token"),
                     };
-                    self.init_variable(&self.current_scope.clone(), inited_token);
-                    self.add_variables_in_scope(production_strong.clone(), scopes, false)
+                    self.right_of_assignment =  vec![];
+                    // process the right 
+                    self.add_variables_in_scope(production_strong.clone(), scopes, false, true);
+                    self.init_variable(
+                        &self.current_scope.clone(),
+                        inited_token,
+                        self.right_of_assignment.clone()
+                        );
+                    break;
                 }
-                _ => self.add_variables_in_scope(production_strong.clone(), scopes, true),
+                _ => self.add_variables_in_scope(production_strong.clone(), scopes, true, false),
             }
         }
     }
 
-    fn init_variable(&mut self, scope: &Weak<RefCell<Scope<'a>>>, token: &'a Token) {
+    fn init_variable(
+        &mut self,
+        scope: &Weak<RefCell<Scope<'a>>>,
+        token: &'a Token, 
+        right_of_assignment: Vec<&'a Token>
+        )
+    {
         let name = match &token.kind {
             TokenKind::Id(id) => id.name,
             _ => panic!("expected id"),
@@ -451,16 +471,13 @@ where
         if let Some(variable) = running_scope.variables.get_mut(&name) {
             // dont add it as a reference her because it will be added later
             variable.is_init = true;
+            variable.right_of_assignment = right_of_assignment;
         } else {
-            let reference = Reference { 
-                scope: scope.clone(),
-                token,
-            };
-            self.undeclared_references.push(reference);
+            self.undeclared_references.push(token);
         }
     }
 
-    fn use_variable(&mut self, scope: &Weak<RefCell<Scope<'a>>>, token: &'a Token, include_as_used: bool) {
+    fn use_variable(&mut self, scope: &Weak<RefCell<Scope<'a>>>, token: &'a Token, in_assignment: bool) {
         let name = match &token.kind {
             TokenKind::Id(id) => id.name,
             _ => panic!("expected id"),
@@ -471,22 +488,20 @@ where
         let running_scope_strong = running_scope_weak.upgrade().unwrap();
         let mut running_scope = running_scope_strong.borrow_mut();
         if let Some(variable) = running_scope.variables.get_mut(&name) {
-            if include_as_used { variable.is_used = true; }
-            let reference = Reference { 
-                token,
-                scope: scope.clone(),
-            };
-            variable.references.push(reference);
+            if variable.is_init {
+                return;
+            }
+            if in_assignment { 
+                self.right_of_assignment.push(&token);
+            } else {
+                variable.is_used = true; 
+            }
             return;
         }
         if let Some(parent_scope_weak) = &running_scope.parent {
-            self.use_variable(parent_scope_weak, token, include_as_used);
+            self.use_variable(parent_scope_weak, token, in_assignment);
         } else {
-            let reference = Reference { 
-                scope: scope.clone(),
-                token,
-            };
-            self.undeclared_references.push(reference);
+            self.undeclared_references.push(token);
         }
     }
 
@@ -523,9 +538,16 @@ where
         last_scope.children.push(new_scope_ref);
     }
 
+    // the idea for this algorithm is to well propagate the used to all
+    //    variables. This reminds of Dijkstra's algorithm
+    // this is done because if a variable 
+    fn propagate_used(&mut self) {
+
+    }
+
     fn show(&self) {
         println!("Displaying the symbol table of declared variables");
-        println!(" NAME TYPE        INITED?  USED?  SCOPE");
+        println!("{}", " NAME TYPE        INITED?  USED?  SCOPE".blue());
         ScopeTree::<T>::show_self_children(&self.root);
     }
 
@@ -604,6 +626,7 @@ mod semantic_tests {
         ast.show();
         println!("Showing Scope table");
         println!();
+        println!();
         scope_tree.show();
         
     }
@@ -636,6 +659,41 @@ mod semantic_tests {
         println!("Showing AST:");
         println!();
         ast.show();
+        println!();
+        println!("Showing Scope table");
+        println!();
+        scope_tree.show();
+    }
+
+    #[test]
+    fn is_used() {
+        // file: {}$
+        let path_str = "test_cases/semantic-edge-cases/is-used";
+        let tokens = helper_get_tokens(path_str);
+        let cst = helper_get_cst(tokens.iter());
+        let ast = AbstractSyntaxTree::new(cst);
+        let scope_tree = ScopeTree::new(&ast);
+        println!("Showing AST:");
+        println!();
+        ast.show();
+        println!();
+        println!("Showing Scope table");
+        println!();
+        scope_tree.show();
+    }
+
+    #[test]
+    fn propagate_used() {
+        // file: {}$
+        let path_str = "test_cases/semantic-edge-cases/propagate-used";
+        let tokens = helper_get_tokens(path_str);
+        let cst = helper_get_cst(tokens.iter());
+        let ast = AbstractSyntaxTree::new(cst);
+        let scope_tree = ScopeTree::new(&ast);
+        println!("Showing AST:");
+        println!();
+        ast.show();
+        println!();
         println!("Showing Scope table");
         println!();
         scope_tree.show();
