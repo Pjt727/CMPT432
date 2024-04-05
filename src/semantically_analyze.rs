@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use crate::parse::*;
 use crate::token::*;
+use std::ptr;
 use colored::Colorize;
 use std::cell::Ref;
 use std::collections::HashMap;
@@ -304,12 +305,19 @@ where
     }
 }
 
+#[derive(Clone)]
 struct Reference<'a> {
     token: &'a Token,
     scope: Weak<RefCell<Scope<'a>>>,
 }
 
+struct RedeclarationError<'a> {
+    first_variable: Variable<'a>,
+    second_variable: Variable<'a>,
+}
+
 // is_init is not included bc there would just be an error if the variable not found
+#[derive(Clone)]
 struct Variable<'a> {
     token: &'a Token,
     references: Vec<Reference<'a>>,
@@ -333,6 +341,7 @@ struct ScopeTree<'a, T> {
     root: Rc<RefCell<Scope<'a>>>,
     current_scope: Weak<RefCell<Scope<'a>>>,
     undeclared_references: Vec<Reference<'a>>,
+    redeclared_variables: Vec<RedeclarationError<'a>>,
     marker: PhantomData<T>,
 }
 
@@ -352,6 +361,7 @@ where
             current_scope: Rc::downgrade(&root_node),
             root: root_node,
             undeclared_references: vec![],
+            redeclared_variables: vec![],
             marker: PhantomData
         };
 
@@ -370,7 +380,10 @@ where
             let production_strong = match child {
                 AbstractNodeEnum::AbstractProduction(p) => p,
                 AbstractNodeEnum::Terminal(t) => match &t.kind {
-                    TokenKind::Id(_) => todo!(),
+                    TokenKind::Id(_) => { 
+                        self.use_variable(&self.current_scope.clone(), t, include_as_used); 
+                        continue 
+                    }
                     _ => continue,
                 },
             };
@@ -464,10 +477,15 @@ where
         };
         let curret_scope_strong = self.current_scope.upgrade().unwrap();
         let mut current_scope = curret_scope_strong.borrow_mut();
-        if current_scope.variables.contains_key(&name) {
-            todo!()
+        if let Some(first_variable) = current_scope.variables.get(&name) {
+            let redeclaration = RedeclarationError {
+                first_variable: first_variable.clone(),
+                second_variable: variable,
+            };
+            self.redeclared_variables.push(redeclaration);
+        } else {
+            current_scope.variables.insert(name, variable);
         }
-        current_scope.variables.insert(name, variable);
     }
 
     fn add_scope(&mut self, flat_scopes: &Vec<u8>) {
