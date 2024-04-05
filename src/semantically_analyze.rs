@@ -41,7 +41,7 @@ impl fmt::Display for AbstractProductionType {
                 write!(f, "String Expression \"{}\"", expression)
             }
             AbstractProductionType::Boolop(token) => {
-                write!(f, "Boolean Operation {}", token.representation)
+                write!(f, "Boolean Operation \"{}\"", token.representation)
             }
         }
     }
@@ -283,7 +283,7 @@ where
     pub fn show(&self) {
         let root_mut = self.root.borrow_mut();
         let node_enum = &root_mut.children;
-        println!("<{}>", root_mut.abstract_type);
+        println!(" <{}>", root_mut.abstract_type);
         self.traverse(node_enum, 1);
     }
 
@@ -293,21 +293,15 @@ where
             match child {
                 AbstractNodeEnum::AbstractProduction(p) => {
                     let p_mut = p.borrow_mut();
-                    println!("{}<{}>", indent.blue(), p_mut.abstract_type);
+                    println!("{} <{}>", indent.blue(), p_mut.abstract_type);
                     self.traverse(&p_mut.children, depth + 1);
                 }
                 AbstractNodeEnum::Terminal(t) => {
-                    println!("{}[{}]", indent.blue(), t.representation)
+                    println!("{} [{}]", indent.blue(), t.representation)
                 }
             }
         }
     }
-}
-
-enum DataType {
-    Int,
-    String,
-    Bool,
 }
 
 // is_init is not included bc there would just be an error if the variable not found
@@ -317,14 +311,94 @@ struct Variable<'a> {
     // in a flat way
     scope: Vec<u8>,
     is_used: bool,
-    data_type: DataType,
+    data_type: &'a Token,
 }
 
 struct BlockNode<'a> {
-    // in this case I would usually not use a ha
+    // A very simple perfect hash exists for char's and in our care
+    //   we only would need to make 26 spots in the array to implement a perfect hash
+    // I will still leave this as a HashMap type to make Alan happy though
     variables: HashMap<char, Variable<'a>>,
+    children: Vec<BlockNode<'a>>,
+    parent: Option<Weak<RefCell<BlockNode<'a>>>>,
 }
-struct ScopeTree {}
+struct ScopeTree<'a, T> {
+    root: Rc<RefCell<BlockNode<'a>>>,
+    current_node: Weak<RefCell<BlockNode<'a>>>,
+    marker: PhantomData<T> 
+}
+
+impl<'a, T> ScopeTree<'a, T>
+where
+    T: Iterator<Item = &'a Token>,
+{
+    pub fn new(ast: &AbstractSyntaxTree<T>) -> Self {
+        let root_node = Rc::new(RefCell::new(BlockNode {
+            variables: HashMap::new(),
+            children: vec![],
+            parent: None,
+        }));
+
+        let scope_tree = ScopeTree {
+            current_node: Rc::downgrade(&root_node),
+            root: root_node,
+            marker: PhantomData
+        };
+
+        return scope_tree;
+    }
+
+    fn add_variables_in_scope(&mut self, start_production_strong: Rc<RefCell<AbstractProduction<'a>>>, scopes: &mut Vec<u8>) {
+        let start_production = start_production_strong.borrow_mut();
+        for child in &start_production.children {
+            let production_strong = match child {
+                AbstractNodeEnum::AbstractProduction(p) => p,
+                AbstractNodeEnum::Terminal(_) => continue,
+            };
+            let production = production_strong.borrow_mut();
+            match production.abstract_type {
+                AbstractProductionType::Block => {
+                    // create a new scope owner for this scope and all siblings
+                    let new_scopes = &mut scopes.clone();
+                    new_scopes.push(0);
+                    self.add_variables_in_scope(production_strong.clone(), new_scopes);
+                    // increment the scope for the next block with the same scope owner
+                    let last_scope = scopes.last_mut().expect("scope list was empty??");
+                    *last_scope += 1;
+                }
+                AbstractProductionType::VarDecl => {
+                    let mut var_children = production.children.iter();
+                    let variable_type = match var_children.next().unwrap() {
+                        AbstractNodeEnum::Terminal(t) => match t.kind {
+                            TokenKind::Id(_) => *t,
+                            _ => panic!("expected id")
+                        },
+                        AbstractNodeEnum::AbstractProduction(_) => panic!("expected id"),
+                    };
+                    let variable_token = match var_children.next().unwrap() {
+                        AbstractNodeEnum::Terminal(t) => match t.kind {
+                            TokenKind::Id(_) => *t,
+                            _ => panic!("expected id")
+                        },
+                        AbstractNodeEnum::AbstractProduction(_) => panic!("expected id"),
+                    };
+ 
+                    self.add_variable(Variable {
+                        token: variable_token,
+                        scope: scopes.clone(),
+                        is_used: false,
+                        data_type: variable_type,
+                    });
+                }
+                _ => self.add_variables_in_scope(production_strong.clone(), scopes),
+            }
+        }
+    }
+    fn add_variable(&mut self, variable: Variable) {
+
+    }
+}
+
 
 #[cfg(test)]
 mod semantic_tests {
