@@ -309,7 +309,7 @@ struct Variable<'a> {
     token: &'a Token,
     // represents the path of a variable down the tree could be used to check scope
     // in a flat way
-    scope: Vec<u8>,
+    scopes: Vec<u8>,
     is_used: bool,
     data_type: &'a Token,
 }
@@ -319,12 +319,13 @@ struct BlockNode<'a> {
     //   we only would need to make 26 spots in the array to implement a perfect hash
     // I will still leave this as a HashMap type to make Alan happy though
     variables: HashMap<char, Variable<'a>>,
-    children: Vec<BlockNode<'a>>,
+    children: Vec<Rc<RefCell<BlockNode<'a>>>>,
     parent: Option<Weak<RefCell<BlockNode<'a>>>>,
 }
+
 struct ScopeTree<'a, T> {
     root: Rc<RefCell<BlockNode<'a>>>,
-    current_node: Weak<RefCell<BlockNode<'a>>>,
+    current_scope: Weak<RefCell<BlockNode<'a>>>,
     marker: PhantomData<T> 
 }
 
@@ -340,7 +341,7 @@ where
         }));
 
         let scope_tree = ScopeTree {
-            current_node: Rc::downgrade(&root_node),
+            current_scope: Rc::downgrade(&root_node),
             root: root_node,
             marker: PhantomData
         };
@@ -348,7 +349,12 @@ where
         return scope_tree;
     }
 
-    fn add_variables_in_scope(&mut self, start_production_strong: Rc<RefCell<AbstractProduction<'a>>>, scopes: &mut Vec<u8>) {
+    fn add_variables_in_scope(
+        &mut self,
+        start_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
+        scopes: &mut Vec<u8>) 
+    {
+
         let start_production = start_production_strong.borrow_mut();
         for child in &start_production.children {
             let production_strong = match child {
@@ -361,6 +367,11 @@ where
                     // create a new scope owner for this scope and all siblings
                     let new_scopes = &mut scopes.clone();
                     new_scopes.push(0);
+                    // I understand that this is perhaps slightly more complex and misdirected than
+                    //    it needs to be... I am mananging instance state through side efffects 
+                    //    and the state of recursive calls. could argue that it is better to simply
+                    //    add a parameter current_node instead of having it instanced
+                    self.add_scope();
                     self.add_variables_in_scope(production_strong.clone(), new_scopes);
                     // increment the scope for the next block with the same scope owner
                     let last_scope = scopes.last_mut().expect("scope list was empty??");
@@ -369,15 +380,20 @@ where
                 AbstractProductionType::VarDecl => {
                     let mut var_children = production.children.iter();
                     let variable_type = match var_children.next().unwrap() {
-                        AbstractNodeEnum::Terminal(t) => match t.kind {
-                            TokenKind::Id(_) => *t,
-                            _ => panic!("expected id")
+                        AbstractNodeEnum::Terminal(t) => match &t.kind {
+                            TokenKind::Keyword(k) => match k {
+                                Keyword::Boolean => *t,
+                                Keyword::String => *t,
+                                Keyword::Int => *t,
+                                _ => panic!("expected type"),
+                            },
+                            _ => panic!("expected type")
                         },
-                        AbstractNodeEnum::AbstractProduction(_) => panic!("expected id"),
+                        AbstractNodeEnum::AbstractProduction(_) => panic!("expected type"),
                     };
                     let variable_token = match var_children.next().unwrap() {
                         AbstractNodeEnum::Terminal(t) => match t.kind {
-                            TokenKind::Id(_) => *t,
+                            TokenKind::Id(id) => *t,
                             _ => panic!("expected id")
                         },
                         AbstractNodeEnum::AbstractProduction(_) => panic!("expected id"),
@@ -385,7 +401,7 @@ where
  
                     self.add_variable(Variable {
                         token: variable_token,
-                        scope: scopes.clone(),
+                        scopes: scopes.clone(),
                         is_used: false,
                         data_type: variable_type,
                     });
@@ -394,8 +410,32 @@ where
             }
         }
     }
-    fn add_variable(&mut self, variable: Variable) {
 
+    fn add_variable(&mut self, variable: Variable<'a>) {
+        let name = match &variable.token.kind {
+            TokenKind::Id(id) => id.name,
+            _ => panic!("expected char"),
+        };
+        let curret_scope_strong = self.current_scope.upgrade().unwrap();
+        let mut current_scope = curret_scope_strong.borrow_mut();
+        if current_scope.variables.contains_key(&name) {
+            todo!()
+        }
+        current_scope.variables.insert(name, variable);
+    }
+
+    fn add_scope(&mut self) {
+        let last_scope = &self.current_scope;
+        let last_scope_strong = last_scope.upgrade().unwrap();
+        let mut last_scope = last_scope_strong.borrow_mut();
+        let new_scope = BlockNode {
+            variables: HashMap::new(),
+            children: vec![],
+            parent: Some(Rc::downgrade(&last_scope_strong)),
+        };
+        let new_scope_ref = Rc::new(RefCell::new(new_scope));
+        self.current_scope = Rc::downgrade(&new_scope_ref);
+        last_scope.children.push(new_scope_ref);
     }
 }
 
