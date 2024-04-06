@@ -144,4 +144,18 @@ impl Token {
             _ => false,
         }
     }
+
+    pub fn get_position(&self) -> String {
+        let character_rep;
+
+        // I want to print ranges of position only if they are not
+        //    1 char long
+        let (start_pos, end_pos) = self.start_end_position;
+        if start_pos == end_pos - 1 {
+            character_rep = format!("{}", start_pos);
+        } else {
+            character_rep = format!("{}-{}", start_pos, end_pos,)
+        }
+        return format!("{}:{}", self.line, character_rep)
+    }
 }
