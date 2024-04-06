@@ -331,7 +331,6 @@ struct Scope<'a> {
 
 struct ScopeTree<'a, T> {
     root: Rc<RefCell<Scope<'a>>>,
-    current_scope: Weak<RefCell<Scope<'a>>>,
     // I was too lazy to do my errors as types
     undeclared_references: Vec<Reference<'a>>,
     uninitialized_reference: Vec<Reference<'a>>,
@@ -354,8 +353,7 @@ where
         }));
 
         let mut scope_tree = ScopeTree {
-            current_scope: Rc::downgrade(&root_node),
-            root: root_node,
+            root: root_node.clone(),
             undeclared_references: vec![],
             redeclared_variables: vec![],
             uninitialized_reference: vec![],
@@ -365,14 +363,19 @@ where
         };
 
         let first_scopes: Vec<u8> = vec![0, 0];
-        scope_tree.add_variables_in_scope(ast.root.clone(), &mut first_scopes.clone(), false, false);
+        scope_tree.add_variables_in_scope(
+            ast.root.clone(),
+            Rc::downgrade(&root_node),
+            &mut first_scopes.clone(), false, false
+            );
         return scope_tree;
     }
 
     fn add_variables_in_scope(
         &mut self,
         start_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
-        scopes: &mut Vec<u8>,
+        scope: Weak<RefCell<Scope<'a>>>,
+        flat_scopes: &mut Vec<u8>,
         in_assignment: bool,
         skip_first_child: bool,
         ) 
@@ -389,7 +392,7 @@ where
                 AbstractNodeEnum::AbstractProduction(p) => p,
                 AbstractNodeEnum::Terminal(t) => match &t.kind {
                     TokenKind::Id(_) => { 
-                        self.use_variable(&self.current_scope.clone(), t, in_assignment, &self.current_scope.clone()); 
+                        self.use_variable(&scope, t, in_assignment, &scope); 
                         continue 
                     }
                     _ => continue,
@@ -399,18 +402,18 @@ where
             match production.abstract_type {
                 AbstractProductionType::Block => {
                     // create a new scope owner for this scope and all siblings
-                    let new_scopes = &mut scopes.clone();
+                    let new_scopes = &mut flat_scopes.clone();
                     new_scopes.push(0);
-                    // I understand that this is perhaps slightly more complex and misdirected than
-                    //    it needs to be... I am mananging instance state through side efffects 
-                    //    and the state of recursive calls. could argue that it is better to simply
-                    //    add a parameter current_node instead of having it instanced
-                    // safe to rest right of assignment because blocks cannot be in assignments
-                    // increment the scope for sibling scopes
-                    self.add_scope(&scopes.clone());
-                    let last_scope = scopes.last_mut().expect("scope list was empty??");
+                    let new_scope = self.add_scope(&flat_scopes.clone(), scope.clone());
+                    let last_scope = flat_scopes.last_mut().expect("scope list was empty??");
                     *last_scope += 1;
-                    self.add_variables_in_scope(production_strong.clone(), new_scopes, false, false);
+                    self.add_variables_in_scope(
+                        production_strong.clone(),
+                        new_scope.clone(),
+                        new_scopes,
+                        false,
+                        false
+                        );
                 }
                 AbstractProductionType::VarDecl => {
                     let mut var_children = production.children.iter();
@@ -434,13 +437,14 @@ where
                         AbstractNodeEnum::AbstractProduction(_) => panic!("expected id"),
                     };
  
-                    self.add_variable(Variable {
+                    let variable = Variable {
                         token: variable_token,
                         data_type: variable_type,
                         right_of_assignment: vec![],
                         is_used: false,
                         is_init: false,
-                    });
+                    };
+                    self.add_variable(variable, scope.clone());
                 }
                 AbstractProductionType::AssignmentStatement => {
                     let inited_node = production.children.first().unwrap();
@@ -450,15 +454,28 @@ where
                     };
                     self.right_of_assignment =  vec![];
                     // process the right 
-                    self.add_variables_in_scope(production_strong.clone(), scopes, true, true);
+                    self.add_variables_in_scope(
+                        production_strong.clone(),
+                        scope.clone(),
+                        flat_scopes,
+                        true,
+                        true
+                        );
+
                     self.init_variable(
-                        &self.current_scope.clone(),
+                        &scope,
                         inited_token,
                         self.right_of_assignment.clone()
                         );
                 }
                 _ => {
-                    self.add_variables_in_scope(production_strong.clone(), scopes, in_assignment, false)
+                    self.add_variables_in_scope(
+                        production_strong.clone(),
+                        scope.clone(),
+                        flat_scopes,
+                        in_assignment,
+                        false
+                        )
                 }
             }
         }
@@ -534,20 +551,20 @@ where
         }
     }
 
-    fn add_variable(&mut self, variable: Variable<'a>) {
+    fn add_variable(&mut self, variable: Variable<'a>, scope: Weak<RefCell<Scope<'a>>>) {
         self.variable_counter += 1;
         let name = match &variable.token.kind {
             TokenKind::Id(id) => id.name,
             _ => panic!("expected id"),
         };
-        let curret_scope_strong = self.current_scope.upgrade().unwrap();
+        let curret_scope_strong = scope.upgrade().unwrap();
         let mut current_scope = curret_scope_strong.borrow_mut();
         if let Some(first_variable) = current_scope.variables.get(&name) {
             println!("redec");
             let redeclaration = RedeclarationError {
                 first_variable: first_variable.clone(),
                 second_variable: variable,
-                scope: self.current_scope.clone(),
+                scope: scope.clone(),
             };
             self.redeclared_variables.push(redeclaration);
         } else {
@@ -555,9 +572,8 @@ where
         }
     }
 
-    fn add_scope(&mut self, flat_scopes: &Vec<u8>) {
-        let last_scope = &self.current_scope;
-        let last_scope_strong = last_scope.upgrade().unwrap();
+    fn add_scope(&self, flat_scopes: &Vec<u8>, scope: Weak<RefCell<Scope<'a>>>) -> Weak<RefCell<Scope<'a>>> {
+        let last_scope_strong = scope.upgrade().unwrap();
         let mut last_scope = last_scope_strong.borrow_mut();
         let new_scope = Scope {
             parent: Some(Rc::downgrade(&last_scope_strong)),
@@ -566,8 +582,9 @@ where
             flat_scopes: flat_scopes.clone()
         };
         let new_scope_ref = Rc::new(RefCell::new(new_scope));
-        self.current_scope = Rc::downgrade(&new_scope_ref);
+        let new_scope_weak = Rc::downgrade(&new_scope_ref);
         last_scope.children.push(new_scope_ref);
+        return new_scope_weak;
     }
 
     // the idea for this algorithm is to well propagate the used to all
@@ -768,6 +785,12 @@ mod semantic_tests {
     #[test]
     fn err_block_scope_hell() {
         let path_str = "test_cases/semantic-edge-cases/err-block-scope-hell";
+        general_helper(path_str);
+    }
+
+    #[test]
+    fn err_redeclaration() {
+        let path_str = "test_cases/semantic-edge-cases/err-redeclaration";
         general_helper(path_str);
     }
 }
