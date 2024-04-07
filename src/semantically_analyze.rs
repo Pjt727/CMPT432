@@ -329,18 +329,18 @@ struct Scope<'a> {
     flat_scopes: Vec<u8>,
 }
 
-struct ScopeTree<'a, T> {
+struct SemanticChecks<'a, T> {
     root: Rc<RefCell<Scope<'a>>>,
     // I was too lazy to do my errors as types
     undeclared_references: Vec<Reference<'a>>,
     uninitialized_reference: Vec<Reference<'a>>,
     redeclared_variables: Vec<RedeclarationError<'a>>,
     right_of_assignment: Vec<&'a Token>,
-    variable_counter: u8,
+    variable_counter: usize,
     marker: PhantomData<T>,
 }
 
-impl<'a, T> ScopeTree<'a, T>
+impl<'a, T> SemanticChecks<'a, T>
 where
     T: Iterator<Item = &'a Token>,
 {
@@ -352,22 +352,24 @@ where
             flat_scopes: vec![0],
         }));
 
-        let mut scope_tree = ScopeTree {
+        let mut scope_tree = SemanticChecks {
             root: root_node.clone(),
             undeclared_references: vec![],
             redeclared_variables: vec![],
             uninitialized_reference: vec![],
             right_of_assignment: vec![],
             variable_counter: 0,
-            marker: PhantomData
+            marker: PhantomData,
         };
 
         let first_scopes: Vec<u8> = vec![0, 0];
         scope_tree.add_variables_in_scope(
             ast.root.clone(),
             Rc::downgrade(&root_node),
-            &mut first_scopes.clone(), false, false
-            );
+            &mut first_scopes.clone(),
+            false,
+            false,
+        );
         return scope_tree;
     }
 
@@ -378,22 +380,21 @@ where
         flat_scopes: &mut Vec<u8>,
         in_assignment: bool,
         skip_first_child: bool,
-        ) 
-    {
+    ) {
         let start_production = start_production_strong.borrow();
         let children;
         if skip_first_child {
-            children = start_production.children.iter().skip(1); 
+            children = start_production.children.iter().skip(1);
         } else {
-            children = start_production.children.iter().skip(0); 
+            children = start_production.children.iter().skip(0);
         }
         for child in children {
             let production_strong = match child {
                 AbstractNodeEnum::AbstractProduction(p) => p,
                 AbstractNodeEnum::Terminal(t) => match &t.kind {
-                    TokenKind::Id(_) => { 
-                        self.use_variable(&scope, t, in_assignment, &scope); 
-                        continue 
+                    TokenKind::Id(_) => {
+                        self.use_variable(&scope, t, in_assignment, &scope);
+                        continue;
                     }
                     _ => continue,
                 },
@@ -412,8 +413,8 @@ where
                         new_scope.clone(),
                         new_scopes,
                         false,
-                        false
-                        );
+                        false,
+                    );
                 }
                 AbstractProductionType::VarDecl => {
                     let mut var_children = production.children.iter();
@@ -425,18 +426,18 @@ where
                                 Keyword::Int => *t,
                                 _ => panic!("expected type"),
                             },
-                            _ => panic!("expected type")
+                            _ => panic!("expected type"),
                         },
                         AbstractNodeEnum::AbstractProduction(_) => panic!("expected type"),
                     };
                     let variable_token = match var_children.next().unwrap() {
                         AbstractNodeEnum::Terminal(t) => match &t.kind {
                             TokenKind::Id(_) => *t,
-                            _ => panic!("expected id")
+                            _ => panic!("expected id"),
                         },
                         AbstractNodeEnum::AbstractProduction(_) => panic!("expected id"),
                     };
- 
+
                     let variable = Variable {
                         token: variable_token,
                         data_type: variable_type,
@@ -452,31 +453,25 @@ where
                         AbstractNodeEnum::Terminal(t) => t,
                         AbstractNodeEnum::AbstractProduction(_) => panic!("expected id token"),
                     };
-                    self.right_of_assignment =  vec![];
-                    // process the right 
+                    self.right_of_assignment = vec![];
+                    // process the right
                     self.add_variables_in_scope(
                         production_strong.clone(),
                         scope.clone(),
                         flat_scopes,
                         true,
-                        true
-                        );
+                        true,
+                    );
 
-                    self.init_variable(
-                        &scope,
-                        inited_token,
-                        self.right_of_assignment.clone()
-                        );
+                    self.init_variable(&scope, inited_token, self.right_of_assignment.clone());
                 }
-                _ => {
-                    self.add_variables_in_scope(
-                        production_strong.clone(),
-                        scope.clone(),
-                        flat_scopes,
-                        in_assignment,
-                        false
-                        )
-                }
+                _ => self.add_variables_in_scope(
+                    production_strong.clone(),
+                    scope.clone(),
+                    flat_scopes,
+                    in_assignment,
+                    false,
+                ),
             }
         }
     }
@@ -484,15 +479,14 @@ where
     fn init_variable(
         &mut self,
         scope: &Weak<RefCell<Scope<'a>>>,
-        token: &'a Token, 
-        right_of_assignment: Vec<&'a Token>
-        )
-    {
+        token: &'a Token,
+        right_of_assignment: Vec<&'a Token>,
+    ) {
         let name = match &token.kind {
             TokenKind::Id(id) => id.name,
             _ => panic!("expected id"),
         };
-        let running_scope_weak = scope;// only should happen on the first
+        let running_scope_weak = scope; // only should happen on the first
         let running_scope_strong = running_scope_weak.upgrade().unwrap();
         let mut running_scope = running_scope_strong.borrow_mut();
         if let Some(variable) = running_scope.variables.get_mut(&name) {
@@ -513,15 +507,15 @@ where
         scope: &Weak<RefCell<Scope<'a>>>,
         token: &'a Token,
         in_assignment: bool,
-        first_scope: &Weak<RefCell<Scope<'a>>>)
-    {
+        first_scope: &Weak<RefCell<Scope<'a>>>,
+    ) {
         let name = match &token.kind {
             TokenKind::Id(id) => id.name,
             _ => panic!("expected id"),
         };
 
         // look up the tree from the current position
-        let running_scope_weak = scope;// only should happen on the first
+        let running_scope_weak = scope; // only should happen on the first
         let running_scope_strong = running_scope_weak.upgrade().unwrap();
         let mut running_scope = running_scope_strong.borrow_mut();
         if let Some(variable) = running_scope.variables.get_mut(&name) {
@@ -533,10 +527,10 @@ where
                 self.uninitialized_reference.push(reference);
                 return;
             }
-            if in_assignment { 
+            if in_assignment {
                 self.right_of_assignment.push(&token);
             } else {
-                variable.is_used = true; 
+                variable.is_used = true;
             }
             return;
         }
@@ -572,14 +566,18 @@ where
         }
     }
 
-    fn add_scope(&self, flat_scopes: &Vec<u8>, scope: Weak<RefCell<Scope<'a>>>) -> Weak<RefCell<Scope<'a>>> {
+    fn add_scope(
+        &self,
+        flat_scopes: &Vec<u8>,
+        scope: Weak<RefCell<Scope<'a>>>,
+    ) -> Weak<RefCell<Scope<'a>>> {
         let last_scope_strong = scope.upgrade().unwrap();
         let mut last_scope = last_scope_strong.borrow_mut();
         let new_scope = Scope {
             parent: Some(Rc::downgrade(&last_scope_strong)),
             variables: HashMap::new(),
             children: vec![],
-            flat_scopes: flat_scopes.clone()
+            flat_scopes: flat_scopes.clone(),
         };
         let new_scope_ref = Rc::new(RefCell::new(new_scope));
         let new_scope_weak = Rc::downgrade(&new_scope_ref);
@@ -589,15 +587,24 @@ where
 
     // the idea for this algorithm is to well propagate the used to all
     //    variables. This reminds of Dijkstra's algorithm
-    // this is done because if a variable 
-    fn propagate_used(&mut self) {
+    // this is done because if a variable
+    fn propagate_rest(&mut self, depth: usize) {
+        if depth >= self.variable_counter {
+            return;
+        }
 
+        self.propagate_rest(depth + 1);
+    }
+
+    fn propagate_used(&mut self, scope: Weak<RefCell<Scope>>) {
+        let scope_strong = scope.upgrade().unwrap();
+        let scope = scope_strong.
     }
 
     fn get_err_count(&self) -> usize {
-        &self.uninitialized_reference.len() + 
-        &self.redeclared_variables.len() +
-        &self.undeclared_references.len()
+        &self.uninitialized_reference.len()
+            + &self.redeclared_variables.len()
+            + &self.undeclared_references.len()
     }
 
     fn show(&self) {
@@ -607,38 +614,42 @@ where
                 "{} (x{})",
                 "SEMANTIC VARIABLE NAMESPACE ERRORS".red(),
                 error_count,
-                );
+            );
             for reference in &self.uninitialized_reference {
                 let scope_strong = reference.scope.upgrade().unwrap();
                 let scope = scope_strong.borrow();
 
                 println!(
                     "{} variable \"{}\" found in scope {} at {}",
-                    "Uninitialized Reference".red(), 
+                    "Uninitialized Reference".red(),
                     reference.token.representation,
                     scope_to_str(scope.flat_scopes.clone()),
                     reference.token.get_position()
-                    )
+                )
             }
 
             for redeclaration in &self.redeclared_variables {
                 let tab = "----";
                 let scope_strong = redeclaration.scope.upgrade().unwrap();
                 let scope = scope_strong.borrow();
-                println!("{} found in scope {}", "Redeclared variable".red(), scope_to_str(scope.flat_scopes.clone()));
+                println!(
+                    "{} found in scope {}",
+                    "Redeclared variable".red(),
+                    scope_to_str(scope.flat_scopes.clone())
+                );
                 println!(
                     "{}declaration of \"{}\" at {} {}",
                     tab.red(),
                     redeclaration.first_variable.token.representation,
                     redeclaration.first_variable.token.get_position(),
                     "AND".red()
-                    );
+                );
                 println!(
                     "{}declaration of \"{}\" at {}",
                     tab.red(),
                     redeclaration.second_variable.token.representation,
                     redeclaration.second_variable.token.get_position()
-                    );
+                );
             }
 
             for reference in &self.undeclared_references {
@@ -647,18 +658,17 @@ where
 
                 println!(
                     "{} variable \"{}\" found in scope {} at {}",
-                    "Undeclared Reference".red(), 
+                    "Undeclared Reference".red(),
                     reference.token.representation,
                     scope_to_str(scope.flat_scopes.clone()),
                     reference.token.get_position()
-                    )
+                )
             }
         }
         println!();
         println!("Displaying the symbol table of declared variables");
         println!("{}", " NAME TYPE        INITED?  USED?  SCOPE".blue());
-        ScopeTree::<T>::show_self_children(&self.root);
-
+        SemanticChecks::<T>::show_self_children(&self.root);
     }
 
     fn show_self_children(scope_strong: &Rc<RefCell<Scope<'a>>>) {
@@ -672,32 +682,36 @@ where
 
         for variable in scope.variables.values() {
             print!("[");
-            print!("{name:<col_width1$}", name=variable.token.representation);
-            print!("{is_init:<col_width2$}", is_init=variable.data_type.representation);
-            print!("{is_init:<col_width3$}", is_init=variable.is_init);
-            print!("{is_used:<col_width4$}", is_used=variable.is_used);
-            let joined_scopes = scope.flat_scopes.iter()
+            print!("{name:<col_width1$}", name = variable.token.representation);
+            print!(
+                "{is_init:<col_width2$}",
+                is_init = variable.data_type.representation
+            );
+            print!("{is_init:<col_width3$}", is_init = variable.is_init);
+            print!("{is_used:<col_width4$}", is_used = variable.is_used);
+            let joined_scopes = scope
+                .flat_scopes
+                .iter()
                 .map(|&num| num.to_string())
                 .collect::<Vec<String>>()
                 .join(".");
-            print!("{scope:<col_width5$}", scope=joined_scopes);
+            print!("{scope:<col_width5$}", scope = joined_scopes);
             println!("]");
         }
         for child_scope in scope.children.iter() {
-            ScopeTree::<T>::show_self_children(child_scope)
+            SemanticChecks::<T>::show_self_children(child_scope)
         }
     }
-
 }
 
 fn scope_to_str(scope: Vec<u8>) -> String {
-    let joined_scopes = scope.iter()
+    let joined_scopes = scope
+        .iter()
         .map(|&num| num.to_string())
         .collect::<Vec<String>>()
         .join(".");
-    return joined_scopes.to_string()
+    return joined_scopes.to_string();
 }
-
 
 #[cfg(test)]
 mod semantic_tests {
@@ -737,10 +751,10 @@ mod semantic_tests {
         let tokens = helper_get_tokens(path_str);
         let cst = helper_get_cst(tokens.iter());
         let ast = AbstractSyntaxTree::new(cst);
-        let scope_tree = ScopeTree::new(&ast);
-         println!("Showing AST:");
+        let scope_tree = SemanticChecks::new(&ast);
+        println!("Showing AST:");
         println!();
-         ast.show();
+        ast.show();
         println!("Showing Scope table");
         println!();
         println!();
@@ -755,8 +769,7 @@ mod semantic_tests {
     }
 
     #[test]
-    fn general_semantics() {
-    }
+    fn general_semantics() {}
 
     #[test]
     fn is_not_used() {
