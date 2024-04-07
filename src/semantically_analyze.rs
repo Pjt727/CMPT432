@@ -352,7 +352,7 @@ where
             flat_scopes: vec![0],
         }));
 
-        let mut scope_tree = SemanticChecks {
+        let mut semantically_checked = SemanticChecks {
             root: root_node.clone(),
             undeclared_references: vec![],
             redeclared_variables: vec![],
@@ -363,14 +363,16 @@ where
         };
 
         let first_scopes: Vec<u8> = vec![0, 0];
-        scope_tree.add_variables_in_scope(
+        semantically_checked.add_variables_in_scope(
             ast.root.clone(),
             Rc::downgrade(&root_node),
             &mut first_scopes.clone(),
             false,
             false,
         );
-        return scope_tree;
+        dbg!(semantically_checked.variable_counter);
+        semantically_checked.propagate_all_used(0);
+        return semantically_checked;
     }
 
     fn add_variables_in_scope(
@@ -493,6 +495,10 @@ where
             // dont add it as a reference her because it will be added later
             variable.is_init = true;
             variable.right_of_assignment = right_of_assignment;
+            return
+        } 
+        if let Some(scope) = &running_scope.parent {
+            self.init_variable(&scope, token, right_of_assignment)
         } else {
             let reference = Reference {
                 token,
@@ -588,17 +594,47 @@ where
     // the idea for this algorithm is to well propagate the used to all
     //    variables. This reminds of Dijkstra's algorithm
     // this is done because if a variable
-    fn propagate_rest(&mut self, depth: usize) {
-        if depth >= self.variable_counter {
+    fn propagate_all_used(&self, depth: usize) {
+        // +2 if depth starts at 0 bc we need to do this variable -1 times and 
+        //    depth is 0 indexed whil counter is 1
+        if depth >= self.variable_counter + 2 {
             return;
         }
-
-        self.propagate_rest(depth + 1);
+        self.propagate_used(self.root.clone());
+        self.propagate_all_used(depth + 1);
     }
 
-    fn propagate_used(&mut self, scope: Weak<RefCell<Scope>>) {
-        let scope_strong = scope.upgrade().unwrap();
-        let scope = scope_strong.
+    fn propagate_used(&self, scope_strong: Rc<RefCell<Scope>>) {
+        let scope = scope_strong.borrow();
+        let variables: Vec<Variable> = scope.variables.values().cloned().collect();
+        let children_scopes = scope.children.clone();
+        drop(scope); // need to allow make_variable_used to have a mutable borrow
+        for variable in variables {
+            if variable.is_used {
+                for token in &variable.right_of_assignment {
+                    self.make_variable_used(scope_strong.clone(), token)
+                }
+            }
+        }
+        for child_scope in children_scopes {
+            self.propagate_used(child_scope)
+        }
+    }
+
+    fn make_variable_used(&self, scope_strong: Rc<RefCell<Scope>>, token: &Token) {
+        let name = match &token.kind {
+            TokenKind::Id(id) => id.name,
+            _ => panic!("expected id"),
+        };
+
+        let mut scope = scope_strong.borrow_mut();
+
+        if let Some(variable) = scope.variables.get_mut(&name) {
+            variable.is_used = true;
+        } else if let Some(parent_scope) = scope.parent.clone() {
+            let parent_strong = parent_scope.upgrade().unwrap();
+            self.make_variable_used(parent_strong, token);
+        }
     }
 
     fn get_err_count(&self) -> usize {
@@ -775,10 +811,6 @@ mod semantic_tests {
     fn is_not_used() {
         let path_str = "test_cases/semantic-edge-cases/is-not-used";
         general_helper(path_str);
-    }
-
-    #[test]
-    fn is_not_used_complicated() {
         let path_str = "test_cases/semantic-edge-cases/is-not-used-complicated";
         general_helper(path_str);
     }
@@ -786,6 +818,8 @@ mod semantic_tests {
     #[test]
     fn propagate_used() {
         let path_str = "test_cases/semantic-edge-cases/propagate-used";
+        general_helper(path_str);
+        let path_str = "test_cases/semantic-edge-cases/propagate-used-complicated";
         general_helper(path_str);
     }
 
