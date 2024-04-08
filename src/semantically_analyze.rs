@@ -359,6 +359,16 @@ impl DataType {
     }
 }
 
+impl PartialEq for DataType {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (DataType::Int, DataType::Int) => true,
+            (DataType::Boolean, DataType::Boolean) => true,
+            (DataType::String, DataType::String) => true,
+            _ => false,
+        }
+    }
+}
 
 #[derive(Clone)]
 struct Reference<'a> {
@@ -401,7 +411,7 @@ struct MismatchedTypeError<'a> {
     expected_data_type: DataType,
 }
 
-struct SemanticChecks<'a, T> {
+pub struct SemanticChecks<'a, T> {
     root: Rc<RefCell<Scope<'a>>>,
     // I was too lazy to do my errors as types (I do kinda reget)
     undeclared_references: Vec<Reference<'a>>,
@@ -445,7 +455,6 @@ where
             false,
             false,
         );
-        dbg!(semantically_checked.variable_counter);
         semantically_checked.propagate_all_used(0);
         return semantically_checked;
     }
@@ -454,6 +463,7 @@ where
     //     assignment statements
     //     int operation/ int expression
     //     boolean operation /boolean expression
+    // and yes big ugly function that could probably have a couple of methods off of it
     fn add_variables_in_scope(
         &mut self,
         start_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
@@ -475,6 +485,18 @@ where
                 AbstractNodeEnum::AbstractProduction(p) => p,
                 AbstractNodeEnum::Terminal(t) => match &t.kind {
                     TokenKind::Id(_) => {
+                        if let Some(to_match) = match_type {
+                            if let Some(variable_data_type) = DataType::from_reference(t, scope.clone()) {
+                                if to_match != variable_data_type {
+                                    self.mismatched_types.push(MismatchedTypeError {
+                                        token: t.clone().clone(),
+                                        scope: scope.clone(),
+                                        data_type: DataType::Boolean,
+                                        expected_data_type: to_match,
+                                    })
+                                }
+                            }
+                        }
                         self.use_variable(&scope, t, in_assignment, &scope);
                         continue;
                     }
@@ -578,24 +600,30 @@ where
                         AbstractNodeEnum::Terminal(t) => t,
                         AbstractNodeEnum::AbstractProduction(_) => panic!("expected id token"),
                     };
+                    let needed_data_type = DataType::from_reference(inited_token, scope.clone());
                     self.right_of_assignment = vec![];
                     // process the right
                     self.add_variables_in_scope(
                         production_strong.clone(),
                         scope.clone(),
                         flat_scopes,
-                        match_type,
+                        needed_data_type,
                         true,
                         true,
                     );
 
                     self.init_variable(&scope, inited_token, self.right_of_assignment.clone());
                 }
-                AbstractProductionType::PrintStatement => todo!(),
-                AbstractProductionType::WhileStatement => todo!(),
-                AbstractProductionType::IfStatement => todo!(),
-                AbstractProductionType::Add => todo!(),
-                        
+                AbstractProductionType::Add => {
+                    self.add_variables_in_scope(
+                        production_strong.clone(),
+                        scope.clone(),
+                        flat_scopes,
+                        Some(DataType::Int),
+                        in_assignment,
+                        false,
+                    );
+                },
                 AbstractProductionType::StringExpr(t) => {
                     if let Some(to_match) = match_type {
                             if !matches!(to_match, DataType::Int) {
@@ -607,6 +635,7 @@ where
                                 })
                             }
                         }
+                    // the only "production without children so no need to recursive step"
                 }
                 AbstractProductionType::Boolop(_) => {
                     let mut var_children = production.children.iter();
@@ -724,7 +753,6 @@ where
         let curret_scope_strong = scope.upgrade().unwrap();
         let mut current_scope = curret_scope_strong.borrow_mut();
         if let Some(first_variable) = current_scope.variables.get(&name) {
-            println!("redec");
             let redeclaration = RedeclarationError {
                 first_variable: first_variable.clone(),
                 second_variable: variable,
@@ -805,14 +833,16 @@ where
         &self.uninitialized_reference.len()
             + &self.redeclared_variables.len()
             + &self.undeclared_references.len()
+            + &self.mismatched_types.len()
     }
 
-    fn show(&self) {
+    pub fn show(&self) {
         let error_count = self.get_err_count();
         if error_count > 0 {
+            let tab = "----";
             println!(
                 "{} (x{})",
-                "SEMANTIC VARIABLE NAMESPACE ERRORS".red(),
+                "\nSEMANTIC ERRORS".red(),
                 error_count,
             );
             for reference in &self.uninitialized_reference {
@@ -829,7 +859,6 @@ where
             }
 
             for redeclaration in &self.redeclared_variables {
-                let tab = "----";
                 let scope_strong = redeclaration.scope.upgrade().unwrap();
                 let scope = scope_strong.borrow();
                 println!(
@@ -864,9 +893,25 @@ where
                     reference.token.get_position()
                 )
             }
+
+            for mismatched_type in &self.mismatched_types {
+                let scope_strong = mismatched_type.scope.upgrade().unwrap();
+                let scope = scope_strong.borrow();
+
+                println!(
+                    "{} \"{}\" found in scope {} at {}",
+                    "Mismatched Type".red(),
+                    mismatched_type.token.representation,
+                    scope_to_str(scope.flat_scopes.clone()),
+                    mismatched_type.token.get_position(),
+                );
+                println!("{}expected: {}", tab, mismatched_type.expected_data_type.to_string());
+                println!("{}found: {}", tab, mismatched_type.data_type.to_string());
+            }
+
         }
         println!();
-        println!("Displaying the symbol table of declared variables");
+        println!("{}", "Displaying the symbol table".magenta());
         println!("{}", " NAME TYPE        INITED?  USED?  SCOPE".blue());
         SemanticChecks::<T>::show_self_children(&self.root);
     }
@@ -877,6 +922,9 @@ where
         let col_width3 = 9;
         let col_width4 = 7;
         let col_width5 = 6;
+        let total_width = col_width1 + col_width2 + col_width3 + col_width4 + col_width5;
+        let total_width_half = total_width / 2;
+
 
         let scope = scope_strong.borrow();
 
@@ -897,6 +945,14 @@ where
                 .join(".");
             print!("{scope:<col_width5$}", scope = joined_scopes);
             println!("]");
+            if !variable.is_used {
+                println!(
+                    "{space1}{warning}{space2}",
+                    space1="^".repeat(total_width_half - 9).yellow(),
+                    warning="WARNING UNUSED VARIABLE".yellow(),
+                    space2="^".repeat(total_width_half - 10).yellow(),
+                    )
+            }
         }
         for child_scope in scope.children.iter() {
             SemanticChecks::<T>::show_self_children(child_scope)

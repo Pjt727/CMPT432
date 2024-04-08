@@ -67,6 +67,19 @@ fn compile_steps(file: &Path) {
             cst.show_parse_steps();
             println!();
             cst.show();
+            println!();
+
+            let ast = semantically_analyze::AbstractSyntaxTree::new(cst);
+            println!(
+                "{} for program {}",
+                "Starting Semantic Analysis".magenta(),
+                programs_processed
+            );
+            println!( "{}", "Showing AST".magenta());
+            ast.show();
+            let semantic_checks = semantically_analyze::SemanticChecks::new(&ast);
+            semantic_checks.show();
+            println!();
         } else {
             println!(
                 "{} with {} Fatal Error(s) and {} Warning(s)",
@@ -74,7 +87,7 @@ fn compile_steps(file: &Path) {
                 errors_and_warnings.0,
                 errors_and_warnings.1,
             );
-            println!("{} because of lex errors", "Skipping Parse".red())
+            println!("{} because of lex errors", "Skipping Next Steps".red())
         }
         println!();
         match end_index {

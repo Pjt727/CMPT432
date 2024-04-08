@@ -105,6 +105,7 @@ where
         return cst;
     }
 
+    #[allow(dead_code)]
     pub fn is_err(&self) -> bool {
         match self.root {
             Ok(_) => false,
