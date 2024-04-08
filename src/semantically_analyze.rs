@@ -23,7 +23,7 @@ enum AbstractProductionType {
     VarDecl,
     WhileStatement,
     IfStatement,
-    Add,                // Would need change to same way boolop is implemented for other intops
+    Add,               // Would need change to same way boolop is implemented for other intops
     StringExpr(Token), // sort of a mismatch because string expr will have no children but whtever
     Boolop(Token),
 }
@@ -151,7 +151,7 @@ where
                     ProductionRule::StringExpr => {
                         self.add_production(AbstractProductionType::StringExpr(Token {
                             kind: TokenKind::StringLiteral,
-                            start_end_position: (0,0), // do not know yet
+                            start_end_position: (0, 0), // do not know yet
                             line: 0,
                             representation: "".to_string(),
                         }))
@@ -255,9 +255,7 @@ where
                 }
                 new_token.start_end_position.1 = token.start_end_position.1;
                 new_token.representation = (new_token.representation + &ch.to_string()).to_string();
-                last_production.abstract_type = AbstractProductionType::StringExpr(
-                    new_token
-                );
+                last_production.abstract_type = AbstractProductionType::StringExpr(new_token);
             }
             _ => panic!("Expected last production to be string expr"),
         }
@@ -328,12 +326,10 @@ impl DataType {
     // converts token to type if it can be
     fn from_token(token: &Token) -> DataType {
         match &token.kind {
-            TokenKind::Keyword(k) => {
-                match k {
-                    Keyword::True => DataType::Boolean,
-                    Keyword::False => DataType::Boolean,
-                    _ => panic!("Not a type")
-                }
+            TokenKind::Keyword(k) => match k {
+                Keyword::True => DataType::Boolean,
+                Keyword::False => DataType::Boolean,
+                _ => panic!("Not a type"),
             },
             TokenKind::Id(_) => panic!("Use from reference for references"),
             TokenKind::Digit(_) => DataType::Int,
@@ -353,7 +349,7 @@ impl DataType {
             return Some(variable.data_type);
         }
         if let Some(parent_scope) = &scope.parent {
-            return DataType::from_reference(token, parent_scope.clone())
+            return DataType::from_reference(token, parent_scope.clone());
         }
         return None;
     }
@@ -455,11 +451,10 @@ where
             false,
             false,
         );
-        semantically_checked.propagate_all_used(0);
         return semantically_checked;
     }
 
-    // for match variables you introduce a match type for 
+    // for match variables you introduce a match type for
     //     assignment statements
     //     int operation/ int expression
     //     boolean operation /boolean expression
@@ -486,7 +481,9 @@ where
                 AbstractNodeEnum::Terminal(t) => match &t.kind {
                     TokenKind::Id(_) => {
                         if let Some(to_match) = match_type {
-                            if let Some(variable_data_type) = DataType::from_reference(t, scope.clone()) {
+                            if let Some(variable_data_type) =
+                                DataType::from_reference(t, scope.clone())
+                            {
                                 if to_match != variable_data_type {
                                     self.mismatched_types.push(MismatchedTypeError {
                                         token: t.clone().clone(),
@@ -513,7 +510,7 @@ where
                                 }
                             }
                             continue;
-                        },
+                        }
                         Keyword::False => {
                             if let Some(to_match) = match_type {
                                 if !matches!(to_match, DataType::Boolean) {
@@ -526,7 +523,7 @@ where
                                 }
                             }
                             continue;
-                        },
+                        }
                         _ => continue,
                     },
                     TokenKind::Digit(_) => {
@@ -623,18 +620,18 @@ where
                         in_assignment,
                         false,
                     );
-                },
+                }
                 AbstractProductionType::StringExpr(t) => {
                     if let Some(to_match) = match_type {
-                            if !matches!(to_match, DataType::Int) {
-                                self.mismatched_types.push(MismatchedTypeError {
-                                    token: t.clone(),
-                                    scope: scope.clone(),
-                                    data_type: DataType::Int,
-                                    expected_data_type: to_match,
-                                })
-                            }
+                        if !matches!(to_match, DataType::Int) {
+                            self.mismatched_types.push(MismatchedTypeError {
+                                token: t.clone(),
+                                scope: scope.clone(),
+                                data_type: DataType::Int,
+                                expected_data_type: to_match,
+                            })
                         }
+                    }
                     // the only "production without children so no need to recursive step"
                 }
                 AbstractProductionType::Boolop(_) => {
@@ -646,8 +643,9 @@ where
                     // silly to evaluate it in the case that we dont use it but I wanted
                     //    to use the cool looking syntax
                     let operation_data_type = match first_child_token.kind {
-                        TokenKind::Id(_) => 
-                            DataType::from_reference(first_child_token, scope.clone()),
+                        TokenKind::Id(_) => {
+                            DataType::from_reference(first_child_token, scope.clone())
+                        }
                         _ => Some(DataType::from_token(first_child_token)),
                     };
                     self.add_variables_in_scope(
@@ -658,7 +656,7 @@ where
                         in_assignment,
                         false,
                     );
-                },
+                }
                 _ => self.add_variables_in_scope(
                     production_strong.clone(),
                     scope.clone(),
@@ -688,8 +686,8 @@ where
             // dont add it as a reference her because it will be added later
             variable.is_init = true;
             variable.right_of_assignment = right_of_assignment;
-            return
-        } 
+            return;
+        }
         if let Some(scope) = &running_scope.parent {
             self.init_variable(&scope, token, right_of_assignment)
         } else {
@@ -730,6 +728,12 @@ where
                 self.right_of_assignment.push(&token);
             } else {
                 variable.is_used = true;
+                let variable_for_reference = variable.clone();
+                drop(running_scope); // need to drop so used can make mutable
+                self.propagate_variable_references(
+                    running_scope_strong.clone(),
+                    variable_for_reference,
+                );
             }
             return;
         }
@@ -783,37 +787,17 @@ where
         return new_scope_weak;
     }
 
-    // the idea for this algorithm is to well propagate the used to all
-    //    variables. This reminds of Dijkstra's algorithm
-    // this is done because if a variable
-    fn propagate_all_used(&self, depth: usize) {
-        // +2 if depth starts at 0 bc we need to do this variable -1 times and 
-        //    depth is 0 indexed whil counter is 1
-        if depth >= self.variable_counter + 2 {
-            return;
-        }
-        self.propagate_used(self.root.clone());
-        self.propagate_all_used(depth + 1);
-    }
-
-    fn propagate_used(&self, scope_strong: Rc<RefCell<Scope>>) {
-        let scope = scope_strong.borrow();
-        let variables: Vec<Variable> = scope.variables.values().cloned().collect();
-        let children_scopes = scope.children.clone();
-        drop(scope); // need to allow make_variable_used to have a mutable borrow
-        for variable in variables {
-            if variable.is_used {
-                for token in &variable.right_of_assignment {
-                    self.make_variable_used(scope_strong.clone(), token)
-                }
-            }
-        }
-        for child_scope in children_scopes {
-            self.propagate_used(child_scope)
+    fn propagate_variable_references(
+        &self,
+        scope_strong: Rc<RefCell<Scope<'a>>>,
+        variable: Variable<'a>,
+    ) {
+        for token in &variable.right_of_assignment {
+            self.make_variable_used(scope_strong.clone(), token)
         }
     }
 
-    fn make_variable_used(&self, scope_strong: Rc<RefCell<Scope>>, token: &Token) {
+    fn make_variable_used(&self, scope_strong: Rc<RefCell<Scope<'a>>>, token: &Token) {
         let name = match &token.kind {
             TokenKind::Id(id) => id.name,
             _ => panic!("expected id"),
@@ -823,6 +807,9 @@ where
 
         if let Some(variable) = scope.variables.get_mut(&name) {
             variable.is_used = true;
+            let variable_for_refernece = variable.clone();
+            drop(scope);
+            self.propagate_variable_references(scope_strong.clone(), variable_for_refernece);
         } else if let Some(parent_scope) = scope.parent.clone() {
             let parent_strong = parent_scope.upgrade().unwrap();
             self.make_variable_used(parent_strong, token);
@@ -840,11 +827,7 @@ where
         let error_count = self.get_err_count();
         if error_count > 0 {
             let tab = "----";
-            println!(
-                "{} (x{})",
-                "\nSEMANTIC ERRORS".red(),
-                error_count,
-            );
+            println!("{} (x{})", "\nSEMANTIC ERRORS".red(), error_count,);
             for reference in &self.uninitialized_reference {
                 let scope_strong = reference.scope.upgrade().unwrap();
                 let scope = scope_strong.borrow();
@@ -905,10 +888,13 @@ where
                     scope_to_str(scope.flat_scopes.clone()),
                     mismatched_type.token.get_position(),
                 );
-                println!("{}expected: {}", tab, mismatched_type.expected_data_type.to_string());
+                println!(
+                    "{}expected: {}",
+                    tab,
+                    mismatched_type.expected_data_type.to_string()
+                );
                 println!("{}found: {}", tab, mismatched_type.data_type.to_string());
             }
-
         }
         println!();
         println!("{}", "Displaying the symbol table".magenta());
@@ -924,7 +910,6 @@ where
         let col_width5 = 6;
         let total_width = col_width1 + col_width2 + col_width3 + col_width4 + col_width5;
         let total_width_half = total_width / 2;
-
 
         let scope = scope_strong.borrow();
 
@@ -948,10 +933,10 @@ where
             if !variable.is_used {
                 println!(
                     "{space1}{warning}{space2}",
-                    space1="^".repeat(total_width_half - 9).yellow(),
-                    warning="WARNING UNUSED VARIABLE".yellow(),
-                    space2="^".repeat(total_width_half - 10).yellow(),
-                    )
+                    space1 = "^".repeat(total_width_half - 9).yellow(),
+                    warning = "WARNING UNUSED VARIABLE".yellow(),
+                    space2 = "^".repeat(total_width_half - 10).yellow(),
+                )
             }
         }
         for child_scope in scope.children.iter() {

@@ -557,7 +557,11 @@ pub fn get_lexemes(path: &Path) -> Vec<Result<Token, LexProblem>> {
         }
         // \n is a terminator so fold here
         // note this does not reset strings values so multi line strings should be without err
-
+        if buffer == "/*" {
+            in_comment = true;
+        } else if buffer == "*/" {
+            in_comment = false;
+        }
         if !in_comment {
             fold(
                 &mut buffer,
