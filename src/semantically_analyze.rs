@@ -116,7 +116,7 @@ where
                     self.add_subtree(production_strong.borrow());
                 }
                 // do not need to add any more productions
-                NodeEnum::Terminal(_) => {}
+                NodeEnum::Terminal(_) => { }
             }
             if added_production {
                 self.up_root();
@@ -158,14 +158,18 @@ where
                     }
                     // boolean expression shall store the operation ( == != )
                     ProductionRule::BooleanExpr => {
-                        // have to add a dummy token that will be overwritten
-                        let dummy_token = Token {
-                            kind: TokenKind::Char(Char { letter: 'x' }),
-                            start_end_position: (0, 0),
-                            line: 0,
-                            representation: "x".to_string(),
-                        };
-                        self.add_production(AbstractProductionType::Boolop(dummy_token));
+                        if production.children.len() > 1 {
+                            // have to add a dummy token that will be overwritten
+                            let dummy_token = Token {
+                                kind: TokenKind::Char(Char { letter: 'x' }),
+                                start_end_position: (0, 0),
+                                line: 0,
+                                representation: "x".to_string(),
+                            };
+                            self.add_production(AbstractProductionType::Boolop(dummy_token));
+                        } else {
+                            added_production = false;
+                        }
                     }
                     // productions just for the derivation
                     _ => added_production = false,
@@ -334,6 +338,7 @@ impl DataType {
             },
             TokenKind::Id(_) => panic!("Use from reference for references"),
             TokenKind::Digit(_) => DataType::Int,
+            TokenKind::StringLiteral => DataType::String,
             _ => panic!("Not a type"),
         }
     }
@@ -638,16 +643,39 @@ where
                 AbstractProductionType::Boolop(_) => {
                     let mut var_children = production.children.iter();
                     let first_child_token = match var_children.next().unwrap() {
-                        AbstractNodeEnum::Terminal(t) => t,
-                        AbstractNodeEnum::AbstractProduction(_) => panic!("expected token"),
+                        AbstractNodeEnum::Terminal(t) => t.clone().clone(),
+                        AbstractNodeEnum::AbstractProduction(p) => {
+                            // ONLY VALID CASE IS STRING LITERAL
+                            let production = p.borrow();
+                            match &production.abstract_type {
+                                AbstractProductionType::StringExpr(t) => t.clone(),
+                                // in some boolean hell examaples a boolop can be the first
+                                //   child of another boolop
+                                AbstractProductionType::Boolop(_) => {
+                                    self.add_variables_in_scope(
+                                        production_strong.clone(),
+                                        scope.clone(),
+                                        flat_scopes,
+                                        match_type,
+                                        in_assignment,
+                                        false,
+                                    );
+                                    continue;
+                                }
+                                _ => { 
+                                    println!("{}", production.abstract_type);
+                                    panic!("expected token") 
+                                },
+                            }
+                        },
                     };
                     // silly to evaluate it in the case that we dont use it but I wanted
                     //    to use the cool looking syntax
                     let operation_data_type = match first_child_token.kind {
                         TokenKind::Id(_) => {
-                            DataType::from_reference(first_child_token, scope.clone())
+                            DataType::from_reference(&first_child_token, scope.clone())
                         }
-                        _ => Some(DataType::from_token(first_child_token)),
+                        _ => Some(DataType::from_token(&first_child_token)),
                     };
                     self.add_variables_in_scope(
                         production_strong.clone(),
@@ -808,9 +836,9 @@ where
 
         if let Some(variable) = scope.variables.get_mut(&name) {
             variable.is_used = true;
-            let variable_for_refernece = variable.clone();
+            let variable_for_reference = variable.clone();
             drop(scope);
-            self.propagate_variable_references(scope_strong.clone(), variable_for_refernece);
+            self.propagate_variable_references(scope_strong.clone(), variable_for_reference);
         } else if let Some(parent_scope) = scope.parent.clone() {
             let parent_strong = parent_scope.upgrade().unwrap();
             self.make_variable_used(parent_strong, token);
@@ -932,11 +960,16 @@ where
             print!("{scope:<col_width5$}", scope = joined_scopes);
             println!("]");
             if !variable.is_used {
+                let mut warning_text = "WARNING UNUSED VARIABLE LINE ";
+                if !variable.is_init {
+                    warning_text = "WARNING UNINIT VARIABLE LINE ";
+                }
                 println!(
-                    "{space1}{warning}{space2}",
-                    space1 = "^".repeat(total_width_half - 9).yellow(),
-                    warning = "WARNING UNUSED VARIABLE".yellow(),
-                    space2 = "^".repeat(total_width_half - 10).yellow(),
+                    "{space1}{warning}{line}{space2}",
+                    space1 = "^".repeat(total_width_half - 13).yellow(),
+                    warning = warning_text.yellow(),
+                    line = variable.token.line.to_string().yellow(),
+                    space2 = "^".repeat(total_width_half - 14).yellow(),
                 )
             }
         }

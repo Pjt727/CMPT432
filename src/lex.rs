@@ -245,6 +245,9 @@ fn fold(
 ) -> i32 {
     let mut longest_token: Option<Token> = None;
     for end_range in 1..(buffer.len() + 1) {
+        if buffer == "=" && is_recursive_call {
+            continue
+        }
         // minus 1 bc it is an exclusive range
         let end_position = start_position + end_range as i32;
         match get_token(

@@ -67,19 +67,22 @@ fn compile_steps(file: &Path) {
             cst.show_parse_steps();
             println!();
             cst.show();
-            println!();
-
-            let ast = semantically_analyze::AbstractSyntaxTree::new(cst);
-            println!(
-                "{} for program {}",
-                "Starting Semantic Analysis".magenta(),
-                programs_processed
-            );
-            println!( "{}", "Showing AST".magenta());
-            ast.show();
-            let semantic_checks = semantically_analyze::SemanticChecks::new(&ast);
-            semantic_checks.show();
-            println!();
+            if cst.has_error() {
+                println!("{} because of parse error.", "Skipping Next Steps".red())
+            } else {
+                println!();
+                let ast = semantically_analyze::AbstractSyntaxTree::new(cst);
+                println!(
+                    "{} for program {}",
+                    "Starting Semantic Analysis".magenta(),
+                    programs_processed
+                    );
+                println!( "{}", "Showing AST".magenta());
+                ast.show();
+                let semantic_checks = semantically_analyze::SemanticChecks::new(&ast);
+                semantic_checks.show();
+                println!();
+            }
         } else {
             println!(
                 "{} with {} Fatal Error(s) and {} Warning(s)",

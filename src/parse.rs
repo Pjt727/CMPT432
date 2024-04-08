@@ -89,6 +89,12 @@ impl<'a, T> ConcreteSyntaxTree<'a, T>
 where
     T: Iterator<Item = &'a Token>,
 {
+    pub fn has_error(&self) -> bool {
+        match &self.root {
+            Ok(_) => false,
+            Err(_) => true,
+        }
+    }
     pub fn new(tokens: T) -> Self {
         let root_node = Rc::new(RefCell::new(Production {
             rule: ProductionRule::Program,
@@ -688,6 +694,13 @@ mod parse_tests {
     fn parse_with_spaces() {
         // file: {}$
         let path = "test_cases/general/lex-with-spaces";
+        helper_ok(path.to_string())
+    }
+
+    #[test]
+    fn repeated_addition() {
+        // file: {}$
+        let path = "test_cases/parse-edge-cases/addition";
         helper_ok(path.to_string())
     }
 
