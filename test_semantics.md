@@ -1,3 +1,8 @@
+<!--toc:start-->
+- [Semantic tests](#semantic-tests)
+- [Interesting tests](#interesting-tests)
+<!--toc:end-->
+
 # Semantic tests
 - To run semantic tests do `cargo test semantic` (can also do the full name semantically_analyze)
 - By default rust will hide the std output so use the toggle `-- --show-output`
@@ -11,5 +16,7 @@
 
 # Interesting tests
 - There are a lot of interesting tests some of which have been commented to
-
-# Parse tests
+- stolen tests act to just get a breadth of possibilities
+- The focused tests demonstrate features
+- used scope propagation has some limitations as only variables are reported and not individual assignments like most lsp's outline in the second scope propagation test
+- tested matching type, redeclaration, and uninit and ensured correct type references even in different scopes 
