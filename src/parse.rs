@@ -119,7 +119,7 @@ where
             println!("{} - {}", INFO_TEXT.cyan(), production,);
         }
         if let Err(parse_err) = &self.root {
-            let token_names: Vec<&str> = parse_err
+            let token_names: Vec<String> = parse_err
                 .expected_kinds
                 .iter()
                 .map(|kind| get_token_verbose_name(kind))

@@ -59,33 +59,34 @@ pub mod symbol_mappings {
 // Gets the class name of variable
 // Can change toggle to only include last n classes
 //    or to match enums if it does not work well
-pub fn get_token_verbose_name(token: &TokenKind) -> &str {
+pub fn get_token_verbose_name(token: &TokenKind) -> String {
     match token {
         TokenKind::Keyword(keyword) => match keyword {
-            Keyword::LoopOnTrue => "LOOP_ON_TRUE",
-            Keyword::If => "IF_TRUE_DO",
-            Keyword::String => "STRING_TYPE",
-            Keyword::Boolean => "TYPE_BOOL",
-            Keyword::Int => "INT_TYPE",
-            Keyword::True => "LITERAL_TRUE",
-            Keyword::False => "LITERAL_FALSE",
-            Keyword::Print => "PRINT",
+            Keyword::LoopOnTrue => "LOOP_ON_TRUE".to_string(),
+            Keyword::If => "IF_TRUE_DO".to_string(),
+            Keyword::String => "STRING_TYPE".to_string(),
+            Keyword::Boolean => "TYPE_BOOL".to_string(),
+            Keyword::Int => "INT_TYPE".to_string(),
+            Keyword::True => "LITERAL_TRUE".to_string(),
+            Keyword::False => "LITERAL_FALSE".to_string(),
+            Keyword::Print => "PRINT".to_string(),
         },
-        TokenKind::Id(_) => "IDENTIFIER",
+        TokenKind::Id(_) => "IDENTIFIER".to_string(),
         TokenKind::Symbol(symbol) => match symbol {
-            Symbol::OpenBlock => "BLOCK_OPEN",
-            Symbol::CloseBlock => "BLOCK_CLOSE",
-            Symbol::OpenParenthesis => "PARENTHESIS_OPEN",
-            Symbol::CloseParenthesis => "PARENTHESIS_CLOSE",
-            Symbol::QuotatioinMark => "QUOTATION_MARK",
-            Symbol::Assignment => "ASSIGNMENT",
-            Symbol::CheckEquality => "CHECK_EQUALITY",
-            Symbol::CheckInequality => "CHECK_INEQUALITY",
-            Symbol::Addition => "OPERATOR_ADDITION",
-            Symbol::EndProgram => "END_OF_PROGRAM",
+            Symbol::OpenBlock => "BLOCK_OPEN".to_string(),
+            Symbol::CloseBlock => "BLOCK_CLOSE".to_string(),
+            Symbol::OpenParenthesis => "PARENTHESIS_OPEN".to_string(),
+            Symbol::CloseParenthesis => "PARENTHESIS_CLOSE".to_string(),
+            Symbol::QuotatioinMark => "QUOTATION_MARK".to_string(),
+            Symbol::Assignment => "ASSIGNMENT".to_string(),
+            Symbol::CheckEquality => "CHECK_EQUALITY".to_string(),
+            Symbol::CheckInequality => "CHECK_INEQUALITY".to_string(),
+            Symbol::Addition => "OPERATOR_ADDITION".to_string(),
+            Symbol::EndProgram => "END_OF_PROGRAM".to_string(),
         },
-        TokenKind::Digit(_) => "LITERAL_DIGIT",
-        TokenKind::Char(_) => "LITERAL_CHAR",
+        TokenKind::Digit(_) => "LITERAL_DIGIT".to_string(),
+        TokenKind::Char(_) => "LITERAL_CHAR".to_string(),
+        TokenKind::StringLiteral => format!("LITERAL STRING")
     }
 }
 
@@ -107,6 +108,7 @@ pub enum TokenKind {
     Symbol(Symbol),
     Digit(Digit),
     Char(Char),
+    StringLiteral,
 }
 
 impl Clone for TokenKind {
@@ -117,6 +119,7 @@ impl Clone for TokenKind {
             TokenKind::Symbol(s) => TokenKind::Symbol(s.clone()),
             TokenKind::Digit(d) => TokenKind::Digit(Digit { value: d.value }),
             TokenKind::Char(c) => TokenKind::Char(Char { letter: c.letter }),
+            TokenKind::StringLiteral => TokenKind::StringLiteral
         }
     }
 }

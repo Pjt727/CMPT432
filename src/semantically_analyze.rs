@@ -1,3 +1,4 @@
+#![allow(suspicious_double_ref_op)]
 #![allow(dead_code)]
 use crate::parse::*;
 use crate::token::*;
@@ -23,7 +24,7 @@ enum AbstractProductionType {
     WhileStatement,
     IfStatement,
     Add,                // Would need change to same way boolop is implemented for other intops
-    StringExpr(String), // sort of a mismatch because string expr will have no children but whtever
+    StringExpr(Token), // sort of a mismatch because string expr will have no children but whtever
     Boolop(Token),
 }
 
@@ -38,7 +39,7 @@ impl fmt::Display for AbstractProductionType {
             AbstractProductionType::IfStatement => write!(f, "If Statement"),
             AbstractProductionType::Add => write!(f, "Add"),
             AbstractProductionType::StringExpr(expression) => {
-                write!(f, "String Expression \"{}\"", expression)
+                write!(f, "String Expression \"{}\"", expression.representation)
             }
             AbstractProductionType::Boolop(token) => {
                 write!(f, "Boolean Operation \"{}\"", token.representation)
@@ -148,7 +149,12 @@ where
                     // Int expression are always just addition
                     ProductionRule::IntExpr => added_production = self.add_int_expr(production),
                     ProductionRule::StringExpr => {
-                        self.add_production(AbstractProductionType::StringExpr("".to_string()))
+                        self.add_production(AbstractProductionType::StringExpr(Token {
+                            kind: TokenKind::StringLiteral,
+                            start_end_position: (0,0), // do not know yet
+                            line: 0,
+                            representation: "".to_string(),
+                        }))
                     }
                     // boolean expression shall store the operation ( == != )
                     ProductionRule::BooleanExpr => {
@@ -197,7 +203,9 @@ where
                     Symbol::CloseParenthesis => {}
                 },
                 TokenKind::Digit(_) => self.add_terminal(terminal),
-                TokenKind::Char(char) => self.add_char(char.letter),
+                TokenKind::Char(char) => self.add_char(char.letter, terminal),
+                // token only used for string literal
+                TokenKind::StringLiteral => {}
             },
         }
         return added_production;
@@ -236,13 +244,19 @@ where
     }
 
     // expects last_production to be StringExpr
-    fn add_char(&mut self, ch: char) {
+    fn add_char(&mut self, ch: char, token: &Token) {
         let temp_strong = &self.last_production.upgrade().unwrap();
         let mut last_production = temp_strong.borrow_mut();
         match &last_production.abstract_type {
-            AbstractProductionType::StringExpr(current_string) => {
+            AbstractProductionType::StringExpr(original_token) => {
+                let mut new_token = original_token.clone();
+                if new_token.start_end_position.0 == 0 {
+                    new_token.start_end_position.0 = token.start_end_position.0;
+                }
+                new_token.start_end_position.1 = token.start_end_position.1;
+                new_token.representation = (new_token.representation + &ch.to_string()).to_string();
                 last_production.abstract_type = AbstractProductionType::StringExpr(
-                    current_string.to_string() + &ch.to_string(),
+                    new_token
                 );
             }
             _ => panic!("Expected last production to be string expr"),
@@ -381,7 +395,7 @@ struct Scope<'a> {
 }
 
 struct MismatchedTypeError<'a> {
-    token: &'a Token,
+    token: Token,
     scope: Weak<RefCell<Scope<'a>>>,
     data_type: DataType,
     expected_data_type: DataType,
@@ -469,7 +483,7 @@ where
                             if let Some(to_match) = match_type {
                                 if !matches!(to_match, DataType::Boolean) {
                                     self.mismatched_types.push(MismatchedTypeError {
-                                        token: t,
+                                        token: t.clone().clone(),
                                         scope: scope.clone(),
                                         data_type: DataType::Boolean,
                                         expected_data_type: to_match,
@@ -482,7 +496,7 @@ where
                             if let Some(to_match) = match_type {
                                 if !matches!(to_match, DataType::Boolean) {
                                     self.mismatched_types.push(MismatchedTypeError {
-                                        token: t,
+                                        token: t.clone().clone(),
                                         scope: scope.clone(),
                                         data_type: DataType::Boolean,
                                         expected_data_type: to_match,
@@ -497,7 +511,7 @@ where
                         if let Some(to_match) = match_type {
                             if !matches!(to_match, DataType::Int) {
                                 self.mismatched_types.push(MismatchedTypeError {
-                                    token: t,
+                                    token: t.clone().clone(),
                                     scope: scope.clone(),
                                     data_type: DataType::Int,
                                     expected_data_type: to_match,
@@ -510,7 +524,7 @@ where
                 },
             };
             let production = production_strong.borrow();
-            match production.abstract_type {
+            match &production.abstract_type {
                 AbstractProductionType::Block => {
                     // create a new scope owner for this scope and all siblings
                     let new_scopes = &mut flat_scopes.clone();
@@ -581,22 +595,40 @@ where
                 AbstractProductionType::WhileStatement => todo!(),
                 AbstractProductionType::IfStatement => todo!(),
                 AbstractProductionType::Add => todo!(),
-                AbstractProductionType::StringExpr(_) => todo!(),
+                        
+                AbstractProductionType::StringExpr(t) => {
+                    if let Some(to_match) = match_type {
+                            if !matches!(to_match, DataType::Int) {
+                                self.mismatched_types.push(MismatchedTypeError {
+                                    token: t.clone(),
+                                    scope: scope.clone(),
+                                    data_type: DataType::Int,
+                                    expected_data_type: to_match,
+                                })
+                            }
+                        }
+                }
                 AbstractProductionType::Boolop(_) => {
                     let mut var_children = production.children.iter();
-                    let variable_type = match var_children.next().unwrap() {
-                        AbstractNodeEnum::Terminal(t) => match &t.kind {
-                            TokenKind::Keyword(k) => match k {
-                                Keyword::Boolean => DataType::Boolean,
-                                Keyword::String => DataType::String,
-                                Keyword::Int => DataType::Int,
-                                _ => panic!("expected type"),
-                            },
-                            _ => panic!("expected type"),
-                        },
-                        AbstractNodeEnum::AbstractProduction(_) => panic!("expected type"),
+                    let first_child_token = match var_children.next().unwrap() {
+                        AbstractNodeEnum::Terminal(t) => t,
+                        AbstractNodeEnum::AbstractProduction(_) => panic!("expected token"),
                     };
-
+                    // silly to evaluate it in the case that we dont use it but I wanted
+                    //    to use the cool looking syntax
+                    let operation_data_type = match first_child_token.kind {
+                        TokenKind::Id(_) => 
+                            DataType::from_reference(first_child_token, scope.clone()),
+                        _ => Some(DataType::from_token(first_child_token)),
+                    };
+                    self.add_variables_in_scope(
+                        production_strong.clone(),
+                        scope.clone(),
+                        flat_scopes,
+                        match_type.or_else(|| operation_data_type),
+                        in_assignment,
+                        false,
+                    );
                 },
                 _ => self.add_variables_in_scope(
                     production_strong.clone(),
