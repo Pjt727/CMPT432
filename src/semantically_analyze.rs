@@ -86,7 +86,7 @@ where
         let root = cst.get_root();
         match root {
             Some(node) => ast.build(node),
-            None => todo!(),
+            None => panic!("No valid root for ast??"),
         }
 
         return ast;
@@ -295,6 +295,57 @@ where
     }
 }
 
+#[derive(Clone, Copy)]
+enum DataType {
+    Int,
+    String,
+    Boolean,
+}
+
+impl DataType {
+    fn to_string(&self) -> String {
+        match &self {
+            DataType::Int => "Int".to_string(),
+            DataType::String => "String".to_string(),
+            DataType::Boolean => "Boolean".to_string(),
+        }
+    }
+
+    // converts token to type if it can be
+    fn from_token(token: &Token) -> DataType {
+        match &token.kind {
+            TokenKind::Keyword(k) => {
+                match k {
+                    Keyword::True => DataType::Boolean,
+                    Keyword::False => DataType::Boolean,
+                    _ => panic!("Not a type")
+                }
+            },
+            TokenKind::Id(_) => panic!("Use from reference for references"),
+            TokenKind::Digit(_) => DataType::Int,
+            _ => panic!("Not a type"),
+        }
+    }
+
+    fn from_reference(token: &Token, scope: Weak<RefCell<Scope<'_>>>) -> Option<DataType> {
+        let name = match &token.kind {
+            TokenKind::Id(id) => id.name,
+            _ => panic!("expected id"),
+        };
+
+        let strong_scope = scope.upgrade().unwrap();
+        let scope = strong_scope.borrow();
+        if let Some(variable) = scope.variables.get(&name) {
+            return Some(variable.data_type);
+        }
+        if let Some(parent_scope) = &scope.parent {
+            return DataType::from_reference(token, parent_scope.clone())
+        }
+        return None;
+    }
+}
+
+
 #[derive(Clone)]
 struct Reference<'a> {
     token: &'a Token,
@@ -314,7 +365,7 @@ struct Variable<'a> {
     right_of_assignment: Vec<&'a Token>,
     is_init: bool,
     is_used: bool,
-    data_type: &'a Token,
+    data_type: DataType,
 }
 
 struct Scope<'a> {
@@ -329,12 +380,20 @@ struct Scope<'a> {
     flat_scopes: Vec<u8>,
 }
 
+struct MismatchedTypeError<'a> {
+    token: &'a Token,
+    scope: Weak<RefCell<Scope<'a>>>,
+    data_type: DataType,
+    expected_data_type: DataType,
+}
+
 struct SemanticChecks<'a, T> {
     root: Rc<RefCell<Scope<'a>>>,
-    // I was too lazy to do my errors as types
+    // I was too lazy to do my errors as types (I do kinda reget)
     undeclared_references: Vec<Reference<'a>>,
     uninitialized_reference: Vec<Reference<'a>>,
     redeclared_variables: Vec<RedeclarationError<'a>>,
+    mismatched_types: Vec<MismatchedTypeError<'a>>,
     right_of_assignment: Vec<&'a Token>,
     variable_counter: usize,
     marker: PhantomData<T>,
@@ -357,6 +416,7 @@ where
             undeclared_references: vec![],
             redeclared_variables: vec![],
             uninitialized_reference: vec![],
+            mismatched_types: vec![],
             right_of_assignment: vec![],
             variable_counter: 0,
             marker: PhantomData,
@@ -367,6 +427,7 @@ where
             ast.root.clone(),
             Rc::downgrade(&root_node),
             &mut first_scopes.clone(),
+            None,
             false,
             false,
         );
@@ -375,11 +436,16 @@ where
         return semantically_checked;
     }
 
+    // for match variables you introduce a match type for 
+    //     assignment statements
+    //     int operation/ int expression
+    //     boolean operation /boolean expression
     fn add_variables_in_scope(
         &mut self,
         start_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
         scope: Weak<RefCell<Scope<'a>>>,
         flat_scopes: &mut Vec<u8>,
+        match_type: Option<DataType>,
         in_assignment: bool,
         skip_first_child: bool,
     ) {
@@ -398,6 +464,48 @@ where
                         self.use_variable(&scope, t, in_assignment, &scope);
                         continue;
                     }
+                    TokenKind::Keyword(k) => match k {
+                        Keyword::True => {
+                            if let Some(to_match) = match_type {
+                                if !matches!(to_match, DataType::Boolean) {
+                                    self.mismatched_types.push(MismatchedTypeError {
+                                        token: t,
+                                        scope: scope.clone(),
+                                        data_type: DataType::Boolean,
+                                        expected_data_type: to_match,
+                                    })
+                                }
+                            }
+                            continue;
+                        },
+                        Keyword::False => {
+                            if let Some(to_match) = match_type {
+                                if !matches!(to_match, DataType::Boolean) {
+                                    self.mismatched_types.push(MismatchedTypeError {
+                                        token: t,
+                                        scope: scope.clone(),
+                                        data_type: DataType::Boolean,
+                                        expected_data_type: to_match,
+                                    })
+                                }
+                            }
+                            continue;
+                        },
+                        _ => continue,
+                    },
+                    TokenKind::Digit(_) => {
+                        if let Some(to_match) = match_type {
+                            if !matches!(to_match, DataType::Int) {
+                                self.mismatched_types.push(MismatchedTypeError {
+                                    token: t,
+                                    scope: scope.clone(),
+                                    data_type: DataType::Int,
+                                    expected_data_type: to_match,
+                                })
+                            }
+                        }
+                        continue;
+                    }
                     _ => continue,
                 },
             };
@@ -414,6 +522,7 @@ where
                         production_strong.clone(),
                         new_scope.clone(),
                         new_scopes,
+                        match_type,
                         false,
                         false,
                     );
@@ -423,9 +532,9 @@ where
                     let variable_type = match var_children.next().unwrap() {
                         AbstractNodeEnum::Terminal(t) => match &t.kind {
                             TokenKind::Keyword(k) => match k {
-                                Keyword::Boolean => *t,
-                                Keyword::String => *t,
-                                Keyword::Int => *t,
+                                Keyword::Boolean => DataType::Boolean,
+                                Keyword::String => DataType::String,
+                                Keyword::Int => DataType::Int,
                                 _ => panic!("expected type"),
                             },
                             _ => panic!("expected type"),
@@ -461,16 +570,39 @@ where
                         production_strong.clone(),
                         scope.clone(),
                         flat_scopes,
+                        match_type,
                         true,
                         true,
                     );
 
                     self.init_variable(&scope, inited_token, self.right_of_assignment.clone());
                 }
+                AbstractProductionType::PrintStatement => todo!(),
+                AbstractProductionType::WhileStatement => todo!(),
+                AbstractProductionType::IfStatement => todo!(),
+                AbstractProductionType::Add => todo!(),
+                AbstractProductionType::StringExpr(_) => todo!(),
+                AbstractProductionType::Boolop(_) => {
+                    let mut var_children = production.children.iter();
+                    let variable_type = match var_children.next().unwrap() {
+                        AbstractNodeEnum::Terminal(t) => match &t.kind {
+                            TokenKind::Keyword(k) => match k {
+                                Keyword::Boolean => DataType::Boolean,
+                                Keyword::String => DataType::String,
+                                Keyword::Int => DataType::Int,
+                                _ => panic!("expected type"),
+                            },
+                            _ => panic!("expected type"),
+                        },
+                        AbstractNodeEnum::AbstractProduction(_) => panic!("expected type"),
+                    };
+
+                },
                 _ => self.add_variables_in_scope(
                     production_strong.clone(),
                     scope.clone(),
                     flat_scopes,
+                    match_type,
                     in_assignment,
                     false,
                 ),
@@ -720,8 +852,8 @@ where
             print!("[");
             print!("{name:<col_width1$}", name = variable.token.representation);
             print!(
-                "{is_init:<col_width2$}",
-                is_init = variable.data_type.representation
+                "{data_type:<col_width2$}",
+                data_type = variable.data_type.to_string()
             );
             print!("{is_init:<col_width3$}", is_init = variable.is_init);
             print!("{is_used:<col_width4$}", is_used = variable.is_used);
@@ -838,6 +970,12 @@ mod semantic_tests {
     #[test]
     fn err_redeclaration() {
         let path_str = "test_cases/semantic-edge-cases/err-redeclaration";
+        general_helper(path_str);
+    }
+
+    #[test]
+    fn match_types() {
+        let path_str = "test_cases/semantic-edge-cases/match-types";
         general_helper(path_str);
     }
 }
