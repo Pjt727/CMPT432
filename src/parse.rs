@@ -472,7 +472,7 @@ where
             TokenKind::Keyword(Keyword::LoopOnTrue),
             TokenKind::Keyword(Keyword::If),
             // THESE WERE MISSING
-            TokenKind::Symbol(Symbol::OpenBlock),
+            TokenKind::Symbol(Symbol::CloseBlock),
             TokenKind::Symbol(Symbol::CheckInequality),
             TokenKind::Symbol(Symbol::CheckEquality),
         ];

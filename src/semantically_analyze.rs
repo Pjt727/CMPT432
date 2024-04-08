@@ -254,6 +254,7 @@ where
                     new_token.start_end_position.0 = token.start_end_position.0;
                 }
                 new_token.start_end_position.1 = token.start_end_position.1;
+                new_token.line = token.line;
                 new_token.representation = (new_token.representation + &ch.to_string()).to_string();
                 last_production.abstract_type = AbstractProductionType::StringExpr(new_token);
             }
@@ -623,11 +624,11 @@ where
                 }
                 AbstractProductionType::StringExpr(t) => {
                     if let Some(to_match) = match_type {
-                        if !matches!(to_match, DataType::Int) {
+                        if !matches!(to_match, DataType::String) {
                             self.mismatched_types.push(MismatchedTypeError {
                                 token: t.clone(),
                                 scope: scope.clone(),
-                                data_type: DataType::Int,
+                                data_type: DataType::String,
                                 expected_data_type: to_match,
                             })
                         }
@@ -954,6 +955,10 @@ fn scope_to_str(scope: Vec<u8>) -> String {
     return joined_scopes.to_string();
 }
 
+// Super basic automatic dection of errors because I do not feel like write
+//    all the validation code
+// `cargo test semantic_tests` gives a somewhat reasonable indication that nothing has been broken
+//    but is far from being comprehension
 #[cfg(test)]
 mod semantic_tests {
     use super::*;
@@ -961,7 +966,6 @@ mod semantic_tests {
     use std::path::Path;
     use std::slice::Iter;
 
-    // I should have never used generics :(
     fn helper_get_tokens(path_str: &str) -> Vec<Token> {
         let path = Path::new(&path_str);
         let lexemes = get_lexemes(path);
@@ -977,6 +981,8 @@ mod semantic_tests {
         }
         return tokens;
     }
+    //
+    // I should have never used generics :(
     fn helper_get_cst<'a>(tokens: Iter<'a, Token>) -> ConcreteSyntaxTree<'a, Iter<'a, Token>> {
         let cst = ConcreteSyntaxTree::new(tokens);
         cst.show_parse_steps();
@@ -988,7 +994,7 @@ mod semantic_tests {
     }
 
     // I did not have time / feel like doing programmatic test :(
-    fn general_helper(path_str: &str) {
+    fn general_helper(path_str: &str, amount_of_errors: usize) {
         let tokens = helper_get_tokens(path_str);
         let cst = helper_get_cst(tokens.iter());
         let ast = AbstractSyntaxTree::new(cst);
@@ -1000,13 +1006,17 @@ mod semantic_tests {
         println!();
         println!();
         scope_tree.show();
+        assert!(
+            scope_tree.get_err_count() == amount_of_errors,
+            "did not match error count"
+        );
     }
 
     #[test]
     fn hello_semantic_analysis() {
         // file: {}$
         let path_str = "test_cases/general/hello-compiler";
-        general_helper(path_str);
+        general_helper(path_str, 0);
     }
 
     #[test]
@@ -1015,40 +1025,44 @@ mod semantic_tests {
     #[test]
     fn is_not_used() {
         let path_str = "test_cases/semantic-edge-cases/is-not-used";
-        general_helper(path_str);
+        general_helper(path_str, 0);
         let path_str = "test_cases/semantic-edge-cases/is-not-used-complicated";
-        general_helper(path_str);
+        general_helper(path_str, 0);
+        let path_str = "test_cases/semantic-edge-cases/is-not-used-complicated2";
+        general_helper(path_str, 0);
     }
 
     #[test]
     fn propagate_used() {
         let path_str = "test_cases/semantic-edge-cases/propagate-used";
-        general_helper(path_str);
+        general_helper(path_str, 0);
         let path_str = "test_cases/semantic-edge-cases/propagate-used-complicated";
-        general_helper(path_str);
+        general_helper(path_str, 0);
     }
 
     #[test]
     fn ok_block_scope_hell() {
         let path_str = "test_cases/semantic-edge-cases/ok-block-scope-hell";
-        general_helper(path_str);
+        general_helper(path_str, 0);
     }
 
     #[test]
     fn err_block_scope_hell() {
         let path_str = "test_cases/semantic-edge-cases/err-block-scope-hell";
-        general_helper(path_str);
+        general_helper(path_str, 6);
     }
 
     #[test]
     fn err_redeclaration() {
         let path_str = "test_cases/semantic-edge-cases/err-redeclaration";
-        general_helper(path_str);
+        general_helper(path_str, 2);
     }
 
     #[test]
     fn match_types() {
         let path_str = "test_cases/semantic-edge-cases/match-types";
-        general_helper(path_str);
+        general_helper(path_str, 1);
+        let path_str = "test_cases/semantic-edge-cases/match-types-complicated";
+        general_helper(path_str, 5);
     }
 }
