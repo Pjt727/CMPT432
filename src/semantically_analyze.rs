@@ -116,7 +116,7 @@ where
                     self.add_subtree(production_strong.borrow());
                 }
                 // do not need to add any more productions
-                NodeEnum::Terminal(_) => { }
+                NodeEnum::Terminal(_) => {}
             }
             if added_production {
                 self.up_root();
@@ -662,12 +662,12 @@ where
                                     );
                                     continue;
                                 }
-                                _ => { 
+                                _ => {
                                     println!("{}", production.abstract_type);
-                                    panic!("expected token") 
-                                },
+                                    panic!("expected token")
+                                }
                             }
-                        },
+                        }
                     };
                     // silly to evaluate it in the case that we dont use it but I wanted
                     //    to use the cool looking syntax
@@ -822,7 +822,10 @@ where
         variable: Variable<'a>,
     ) {
         for token in &variable.right_of_assignment {
-            self.make_variable_used(scope_strong.clone(), token)
+            // do not propagate itself
+            if variable.token.representation != token.representation {
+                self.make_variable_used(scope_strong.clone(), token)
+            }
         }
     }
 
