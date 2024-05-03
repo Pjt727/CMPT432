@@ -37,10 +37,11 @@ where
     //    until the end of the program when they are realized
     lazy_codes: [Byte<'a>; ASSEMBLY_SIZE],
     variable_name_scope_to_address_type: HashMap<(char, Vec<u8>), (u8, DataType)>,
+    strings_to_address: HashMap<String, u8>,
     // can be used like a stack to fill in the last jump
     unrealized_jumps_index: Vec<usize>,
     last_code_index: usize,
-    last_heap_index: usize,
+    end_heap_range: usize,
     marker: PhantomData<T>,
 }
 
@@ -52,9 +53,10 @@ where
         let op_codes = OpCodes {
             lazy_codes: [Byte::Code(0); ASSEMBLY_SIZE],
             variable_name_scope_to_address_type: HashMap::new(),
+            strings_to_address: HashMap::new(),
             unrealized_jumps_index: vec![],
             last_code_index: 0,
-            last_heap_index: ASSEMBLY_SIZE - 1,
+            end_heap_range: ASSEMBLY_SIZE - 1,
             marker: PhantomData,
         };
         return op_codes;
@@ -126,8 +128,6 @@ where
                 TokenKind::Id(id) => {
                     let (address, _type) =
                         self.get_variable_info(id.name.clone(), current_scope_strong.clone());
-
-                    //
                 }
                 TokenKind::Digit(_) => todo!(),
                 TokenKind::StringLiteral => todo!(),
@@ -138,12 +138,22 @@ where
 
     fn do_expression_to_memory(&mut self) {}
 
-    fn create_string(&mut self) {}
-
     // want to make sure I never go out of sync
     fn add_to_code(&mut self, byte: Byte<'a>) {
         self.lazy_codes[self.last_code_index] = byte;
         self.last_code_index += 1;
+    }
+
+    // returns the memory address of the first byte of the string
+    fn add_to_heap(&mut self, string: String) -> u8 {
+        let mut chars = string.chars();
+        let length = string.len();
+        for i in (self.end_heap_range - length)..self.end_heap_range {
+            let byte = Byte::Code(chars.nth(i).unwrap() as u8);
+            self.lazy_codes[i] = byte;
+        }
+        self.end_heap_range -= length;
+        return self.end_heap_range as u8;
     }
 
     // using my flat scope to get the correct variable in scope
