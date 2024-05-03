@@ -113,15 +113,37 @@ where
         match right_hand {
             AbstractNodeEnum::AbstractProduction(abstract_production_strong) => {
                 let abstract_production = abstract_production_strong.borrow();
-                match abstract_production.abstract_type {
+                match &abstract_production.abstract_type {
+                    AbstractProductionType::StringExpr(string) => match string.kind {
+                        TokenKind::StringLiteral => {}
+                        _ => panic!("expected string literal"),
+                    },
                     AbstractProductionType::Add => todo!(),
-                    AbstractProductionType::StringExpr(_) => todo!(),
                     AbstractProductionType::Boolop(_) => todo!(),
                     _ => panic!("unexpected production"),
                 }
             }
-            AbstractNodeEnum::Terminal(t) => match t.kind {
-                TokenKind::Id(_) => todo!(),
+            AbstractNodeEnum::Terminal(t) => match &t.kind {
+                TokenKind::Id(id) => {
+                    // NEED TO CHECK FOR THE FIRST FLAT SCOPE THAT WORKS
+                    // general scopes start at [0] so len 1
+                    let mut running_flat_scope = flat_scope.clone();
+                    let mut address_type = None;
+                    loop {
+                        address_type = self
+                            .variable_name_scope_to_address_type
+                            .get(&(id.name.clone(), running_flat_scope.clone()));
+                        if address_type != None {
+                            break;
+                        }
+                        let length = running_flat_scope.len();
+                        if length == 0 {
+                            panic!("variable not found!!")
+                        }
+                        running_flat_scope = running_flat_scope[..running_flat_scope.len() - 1].to_vec();
+                    }
+                    let address = address_type.unwrap().0;
+                }
                 TokenKind::Symbol(_) => todo!(),
                 TokenKind::Digit(_) => todo!(),
                 TokenKind::Char(_) => todo!(),
@@ -132,4 +154,6 @@ where
     }
 
     fn do_expression_to_memory(&mut self) {}
+
+    fn create_string(&mut self) {}
 }
