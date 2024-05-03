@@ -108,7 +108,6 @@ where
         };
         let current_scope = current_scope_strong.borrow();
 
-        let flat_scope = current_scope.flat_scopes.clone();
         let right_hand = type_var_nodes.next().unwrap();
         match right_hand {
             AbstractNodeEnum::AbstractProduction(abstract_production_strong) => {
@@ -125,30 +124,14 @@ where
             }
             AbstractNodeEnum::Terminal(t) => match &t.kind {
                 TokenKind::Id(id) => {
-                    // NEED TO CHECK FOR THE FIRST FLAT SCOPE THAT WORKS
-                    // general scopes start at [0] so len 1
-                    let mut running_flat_scope = flat_scope.clone();
-                    let mut address_type = None;
-                    loop {
-                        address_type = self
-                            .variable_name_scope_to_address_type
-                            .get(&(id.name.clone(), running_flat_scope.clone()));
-                        if address_type != None {
-                            break;
-                        }
-                        let length = running_flat_scope.len();
-                        if length == 0 {
-                            panic!("variable not found!!")
-                        }
-                        running_flat_scope = running_flat_scope[..running_flat_scope.len() - 1].to_vec();
-                    }
-                    let address = address_type.unwrap().0;
+                    let (address, _type) =
+                        self.get_variable_info(id.name.clone(), current_scope_strong.clone());
+
+                    //
                 }
-                TokenKind::Symbol(_) => todo!(),
                 TokenKind::Digit(_) => todo!(),
-                TokenKind::Char(_) => todo!(),
                 TokenKind::StringLiteral => todo!(),
-                TokenKind::Keyword(_) => todo!(),
+                _ => panic!("unexpected token"),
             },
         }
     }
@@ -156,4 +139,38 @@ where
     fn do_expression_to_memory(&mut self) {}
 
     fn create_string(&mut self) {}
+
+    // want to make sure I never go out of sync
+    fn add_to_code(&mut self, byte: Byte<'a>) {
+        self.lazy_codes[self.last_code_index] = byte;
+        self.last_code_index += 1;
+    }
+
+    // using my flat scope to get the correct variable in scope
+    //    I am not really convinced this is easier than how I did in in SE
+    //    but
+    fn get_variable_info(
+        &self,
+        name: char,
+        scope_strong: Rc<RefCell<Scope<'a>>>,
+    ) -> (u8, DataType) {
+        let scope = scope_strong.borrow();
+        let mut running_flat_scope = scope.flat_scopes.clone();
+        let mut address_type = None;
+        loop {
+            address_type = self
+                .variable_name_scope_to_address_type
+                .get(&(name.clone(), running_flat_scope.clone()));
+            if address_type != None {
+                break;
+            }
+            let length = running_flat_scope.len();
+            if length == 0 {
+                panic!("variable not found!!")
+            }
+            running_flat_scope = running_flat_scope[..running_flat_scope.len() - 1].to_vec();
+        }
+
+        return *address_type.unwrap();
+    }
 }
