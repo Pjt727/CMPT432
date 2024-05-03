@@ -16,7 +16,7 @@ enum SematincError {
     UndeclaredVariable,
 }
 
-enum AbstractProductionType {
+pub enum AbstractProductionType {
     Block,
     PrintStatement,
     AssignmentStatement,
@@ -48,15 +48,15 @@ impl fmt::Display for AbstractProductionType {
     }
 }
 
-enum AbstractNodeEnum<'a> {
+pub enum AbstractNodeEnum<'a> {
     AbstractProduction(Rc<RefCell<AbstractProduction<'a>>>),
     Terminal(&'a Token),
 }
 
 // done like this because tokens
-struct AbstractProduction<'a> {
-    abstract_type: AbstractProductionType,
-    children: Vec<AbstractNodeEnum<'a>>,
+pub struct AbstractProduction<'a> {
+    pub abstract_type: AbstractProductionType,
+    pub children: Vec<AbstractNodeEnum<'a>>,
     parent: Option<Weak<RefCell<AbstractProduction<'a>>>>,
 }
 
@@ -313,7 +313,7 @@ where
 }
 
 #[derive(Clone, Copy)]
-enum DataType {
+pub enum DataType {
     Int,
     String,
     Boolean,
@@ -386,24 +386,24 @@ struct RedeclarationError<'a> {
 
 // is_init is not included bc there would just be an error if the variable not found
 #[derive(Clone)]
-struct Variable<'a> {
+pub struct Variable<'a> {
     token: &'a Token,
     right_of_assignment: Vec<&'a Token>,
     is_init: bool,
     is_used: bool,
-    data_type: DataType,
+    pub data_type: DataType,
 }
 
-struct Scope<'a> {
+pub struct Scope<'a> {
     // A very simple perfect hash exists for char's and in our care
     //   we only would need to make 26 spots in the array to implement a perfect hash
     // I will still leave this as a HashMap type to make Alan happy though
-    variables: HashMap<char, Variable<'a>>,
+    pub variables: HashMap<char, Variable<'a>>,
     children: Vec<Rc<RefCell<Scope<'a>>>>,
     parent: Option<Weak<RefCell<Scope<'a>>>>,
     // represents the path of a variable down the tree could be used to check scope
     // in a flat way
-    flat_scopes: Vec<u8>,
+    pub flat_scopes: Vec<u8>,
 }
 
 struct MismatchedTypeError<'a> {
@@ -414,7 +414,7 @@ struct MismatchedTypeError<'a> {
 }
 
 pub struct SemanticChecks<'a, T> {
-    root: Rc<RefCell<Scope<'a>>>,
+    scope_root: Rc<RefCell<Scope<'a>>>,
     // I was too lazy to do my errors as types (I do kinda reget)
     undeclared_references: Vec<Reference<'a>>,
     uninitialized_reference: Vec<Reference<'a>>,
@@ -438,7 +438,7 @@ where
         }));
 
         let mut semantically_checked = SemanticChecks {
-            root: root_node.clone(),
+            scope_root: root_node.clone(),
             undeclared_references: vec![],
             redeclared_variables: vec![],
             uninitialized_reference: vec![],
@@ -931,7 +931,7 @@ where
         println!();
         println!("{}", "Displaying the symbol table".magenta());
         println!("{}", " NAME TYPE        INITED?  USED?  SCOPE".blue());
-        SemanticChecks::<T>::show_self_children(&self.root);
+        SemanticChecks::<T>::show_self_children(&self.scope_root);
     }
 
     fn show_self_children(scope_strong: &Rc<RefCell<Scope<'a>>>) {

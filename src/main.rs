@@ -6,6 +6,7 @@ use colored::Colorize;
 mod parse;
 mod semantically_analyze;
 mod token;
+mod code_generation;
 
 fn compile_steps(file: &Path) {
     let token_entries = lex::get_lexemes(file);
