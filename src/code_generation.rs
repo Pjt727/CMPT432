@@ -206,8 +206,9 @@ impl<'a> OpCodes<'a> {
                             abstract_production_strong.clone(),
                             current_scope_strong.clone(),
                         );
-                        self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                        self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
                         self.add_to_code(byte);
+                        self.add_to_code(Byte::Code(0));
                         self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
                         self.add_variable_reference(left_hand_id, &current_scope.flat_scopes);
                     }
@@ -530,7 +531,7 @@ impl<'a> OpCodes<'a> {
         let mut i = self.next_code_index - 1;
         loop {
             if matches!(self.lazy_codes[i], Byte::Jump) {
-                self.lazy_codes[i] = Byte::Code((self.next_code_index - i) as u8 + 1);
+                self.lazy_codes[i] = Byte::Code((self.next_code_index - i) as u8 - 1);
                 break;
             }
             i -= 1;
@@ -541,7 +542,7 @@ impl<'a> OpCodes<'a> {
 
     // using my flat scope to get the correct variable in scope
     //    I am not really convinced this is easier than how I did in in SE
-    //    but
+    //    but the alternative would be added more things to the scope class i thinck
     fn get_unrealized_index(&self, name: char, reference_flat_scope: &Vec<u8>) -> usize {
         //  im sure there is a better way
         let mut max_index = 69;
