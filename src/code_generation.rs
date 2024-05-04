@@ -23,14 +23,10 @@ const PRINT_Y_OR_MEM: u8 = 0xFF;
 
 const ASSEMBLY_SIZE: usize = 256;
 
-struct RefByte {
-    value: u8,
-}
-
 #[derive(Clone, Copy)]
-enum Byte<'a> {
+enum Byte {
     Code(u8),
-    Reference(&'a RefByte),
+    AddressIndex(usize),
 }
 
 pub struct OpCodes<'a, T>
@@ -39,9 +35,9 @@ where
 {
     // the codes are lazy in that they won't all be correct
     //    until the end of the program when they are realized
-    lazy_codes: [Byte<'a>; ASSEMBLY_SIZE],
-    variable_name_scope_to_address_type: HashMap<(char, Vec<u8>), (RefByte, DataType)>,
+    lazy_codes: [Byte; ASSEMBLY_SIZE],
     strings_to_address: HashMap<String, u8>,
+    unrealized_addresses: Vec<(Variable<'a>, Vec<u8>)>,
     // can be used like a stack to fill in the last jump
     unrealized_jumps_index: Vec<usize>,
     last_code_index: usize,
@@ -56,7 +52,7 @@ where
     fn new() -> OpCodes<'a, T> {
         let op_codes = OpCodes {
             lazy_codes: [Byte::Code(0); ASSEMBLY_SIZE],
-            variable_name_scope_to_address_type: HashMap::new(),
+            unrealized_addresses: vec![],
             strings_to_address: HashMap::new(),
             unrealized_jumps_index: vec![],
             last_code_index: 0,
@@ -85,16 +81,13 @@ where
             AbstractNodeEnum::AbstractProduction(_) => panic!("Expected terminal"),
         };
         let current_scope = current_scope_strong.borrow();
-        let flat_scope = current_scope.flat_scopes.clone();
         let variable = current_scope
             .variables
             .get(&name)
             .expect("variable should've exists")
             .clone();
-        self.variable_name_scope_to_address_type.insert(
-            (name, flat_scope),
-            (RefByte { value: TEMP }, variable.data_type),
-        );
+        self.unrealized_addresses
+            .push((variable, Rc::downgrade(&current_scope_strong)))
     }
 
     fn do_assignment(
@@ -132,8 +125,6 @@ where
             }
             AbstractNodeEnum::Terminal(t) => match &t.kind {
                 TokenKind::Id(id) => {
-                    let (address, _type) =
-                        self.get_variable_info(id.name.clone(), current_scope_strong.clone());
                     self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
                     self.add_variable_reference(address);
                 }
@@ -147,14 +138,14 @@ where
     fn do_expression_to_memory(&mut self) {}
 
     // want to make sure I never go out of sync
-    fn add_to_code(&mut self, byte: Byte<'a>) {
+    fn add_to_code(&mut self, byte: Byte) {
         self.lazy_codes[self.last_code_index] = byte;
         self.last_code_index += 1;
     }
 
     // want to make sure I do not forget the 00
-    fn add_variable_reference(&mut self, address: &'a RefByte) {
-        self.add_to_code(Byte::Reference(address));
+    fn add_variable_reference(&mut self, address: usize) {
+        self.add_to_code(Byte::AddressIndex(address));
         self.add_to_code(Byte::Code(0));
     }
 
@@ -173,28 +164,34 @@ where
     // using my flat scope to get the correct variable in scope
     //    I am not really convinced this is easier than how I did in in SE
     //    but
-    fn get_variable_info(
-        &self,
-        name: char,
-        scope_strong: Rc<RefCell<Scope<'a>>>,
-    ) -> &(RefByte, DataType) {
+    fn get_unrealized_index(&self, name: char, scope_strong: Rc<RefCell<Scope<'a>>>) -> usize {
         let scope = scope_strong.borrow();
-        let mut running_flat_scope = scope.flat_scopes.clone();
-        let mut address_type;
-        loop {
-            address_type = self
-                .variable_name_scope_to_address_type
-                .get(&(name.clone(), running_flat_scope.clone()));
-            if address_type.is_none() {
-                break;
+        let mut reference_flat_scope = scope.flat_scopes.clone();
+
+        let mut max_index;
+        let mut max_shared_scopes;
+        for (i, (_, init_scope)) in self.unrealized_addresses.iter().enumerate() {
+            // cannot reference a variable in a child scope
+            if init_scope.len() > reference_flat_scope.len() {
+                continue;
             }
-            let length = running_flat_scope.len();
-            if length == 0 {
-                panic!("variable not found!!")
+            let mut running_count = 0;
+            // since there is no order for init we have to check all
+            let zipped = reference_flat_scope.iter().zip(init_scope.iter());
+            for (ref_scope, init_scope) in zipped {
+                if ref_scope == init_scope {
+                    running_count += 1;
+                } else {
+                    running_count = -1;
+                    break;
+                }
             }
-            running_flat_scope = running_flat_scope[..running_flat_scope.len() - 1].to_vec();
+            if max_shared_scopes < running_count {
+                max_shared_scopes = running_count;
+                max_index = i;
+            }
         }
 
-        return address_type.unwrap();
+        return max_index;
     }
 }
