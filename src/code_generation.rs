@@ -142,24 +142,98 @@ where
                     self.add_to_code(Byte::Code(digit.value));
                     self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
                     self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
-                },
-                TokenKind::Keyword(k) => {
-                    match k {
-                        Keyword::True => {
-                            self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
-                            self.add_to_code(Byte::Code(1));
-                            self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
-                            self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
-                        },
-                        Keyword::False => {
-                            self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
-                            self.add_to_code(Byte::Code(1));
-                            self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
-                            self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
-                        },
-                        _ => panic!("unexpected token")
-                    }
                 }
+                TokenKind::Keyword(k) => match k {
+                    Keyword::True => {
+                        self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                        self.add_to_code(Byte::Code(1));
+                        self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                        self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
+                    }
+                    Keyword::False => {
+                        self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                        self.add_to_code(Byte::Code(1));
+                        self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                        self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
+                    }
+                    _ => panic!("unexpected token"),
+                },
+                _ => panic!("unexpected token"),
+            },
+        }
+    }
+
+    fn do_print(
+        &mut self,
+        print_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
+        current_scope_strong: Rc<RefCell<Scope<'a>>>,
+    ) {
+        let current_scope = current_scope_strong.borrow();
+        // there always only one child to print
+        let print_production = print_production_strong.borrow();
+        let child_node = print_production.children.iter().next().unwrap();
+        match child_node {
+            AbstractNodeEnum::AbstractProduction(abstract_production_strong) => {
+                let abstract_production = abstract_production_strong.borrow();
+                match &abstract_production.abstract_type {
+                    AbstractProductionType::StringExpr(string) => match string.kind {
+                        TokenKind::StringLiteral => {
+                            // print literal string
+                            let address = self.add_to_heap(&string.representation);
+                            self.add_to_code(Byte::Code(LOAD_Y_CONST));
+                            self.add_to_code(Byte::Code(address));
+                            self.add_to_code(Byte::Code(LOAD_X_CONST));
+                            self.add_to_code(Byte::Code(2));
+                            self.add_to_code(Byte::Code(PRINT_Y_OR_MEM));
+                        }
+                        _ => panic!("expected string literal"),
+                    },
+                    AbstractProductionType::Add => todo!(),
+                    AbstractProductionType::Boolop(_) => todo!(),
+                    _ => panic!("unexpected production"),
+                }
+            }
+            AbstractNodeEnum::Terminal(t) => match &t.kind {
+                TokenKind::Id(id) => {
+                    // print variable
+                    let var_index = self.get_unrealized_index(id.name, &current_scope.flat_scopes);
+                    // I don't really understand why I need to clone here but it prvents
+                    //     immutable and mutable burrows of self with 'a or something
+                    let (variable, _scope) = self.unrealized_addresses[var_index].clone();
+                    self.add_to_code(Byte::Code(LOAD_Y_MEM));
+                    self.add_memory_reference(id.name, &current_scope.flat_scopes);
+                    self.add_to_code(Byte::Code(LOAD_X_CONST));
+                    match &variable.data_type {
+                        DataType::String => self.add_to_code(Byte::Code(2)),
+                        _ => self.add_to_code(Byte::Code(1)),
+                    }
+                    self.add_to_code(Byte::Code(PRINT_Y_OR_MEM));
+                }
+                TokenKind::Digit(digit) => {
+                    // print const | print(1)
+                    self.add_to_code(Byte::Code(LOAD_Y_CONST));
+                    self.add_to_code(Byte::Code(digit.value));
+                    self.add_to_code(Byte::Code(LOAD_X_CONST));
+                    self.add_to_code(Byte::Code(1));
+                    self.add_to_code(Byte::Code(PRINT_Y_OR_MEM));
+                }
+                TokenKind::Keyword(k) => match k {
+                    Keyword::True => {
+                        self.add_to_code(Byte::Code(LOAD_Y_CONST));
+                        self.add_to_code(Byte::Code(1));
+                        self.add_to_code(Byte::Code(LOAD_X_CONST));
+                        self.add_to_code(Byte::Code(1));
+                        self.add_to_code(Byte::Code(PRINT_Y_OR_MEM));
+                    }
+                    Keyword::False => {
+                        self.add_to_code(Byte::Code(LOAD_Y_CONST));
+                        self.add_to_code(Byte::Code(0));
+                        self.add_to_code(Byte::Code(LOAD_X_CONST));
+                        self.add_to_code(Byte::Code(1));
+                        self.add_to_code(Byte::Code(PRINT_Y_OR_MEM));
+                    }
+                    _ => panic!("unexpected token"),
+                },
                 _ => panic!("unexpected token"),
             },
         }
@@ -175,7 +249,6 @@ where
         self.last_code_index += 1;
     }
 
-    // want to make sure I do not forget the 00
     fn add_memory_reference(&mut self, name: char, reference_flat_scope: &Vec<u8>) {
         let index = self.get_unrealized_index(name, reference_flat_scope);
         self.add_to_code(Byte::AddressIndex(index));
