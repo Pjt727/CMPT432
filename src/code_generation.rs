@@ -5,8 +5,6 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::{cell::RefCell, rc::Rc, rc::Weak};
 
-// value not useful but used for self documentation
-const TEMP: u8 = 0x00;
 // const are 1 byte and mem are 2 bytes
 const LOAD_ACCUM_CONST: u8 = 0xA9;
 const LOAD_ACCUM_MEM: u8 = 0xAD;
@@ -16,7 +14,7 @@ const LOAD_X_CONST: u8 = 0xA2;
 const LOAD_X_MEMORY: u8 = 0xAE;
 const LOAD_Y_CONST: u8 = 0xA0;
 const LOAD_Y_MEM: u8 = 0xAC;
-// const BREAK: u8 = 0x00;
+const BREAK: u8 = 0x00;
 const COMPARE_MEM_X_Z: u8 = 0xEC;
 const BRANCH_Z_0: u8 = 0xD0;
 const PRINT_Y_OR_MEM: u8 = 0xFF;
@@ -36,6 +34,7 @@ where
     // the codes are lazy in that they won't all be correct
     //    until the end of the program when they are realized
     lazy_codes: [Byte; ASSEMBLY_SIZE],
+    codes: [u8; ASSEMBLY_SIZE],
     strings_to_address: HashMap<String, u8>,
     unrealized_addresses: Vec<(Variable<'a>, Vec<u8>)>,
     // can be used like a stack to fill in the last jump
@@ -49,9 +48,13 @@ impl<'a, T> OpCodes<'a, T>
 where
     T: Iterator<Item = &'a Token>,
 {
-    fn new() -> OpCodes<'a, T> {
-        let op_codes = OpCodes {
+    fn new(
+        root_production: Rc<RefCell<AbstractProduction<'a>>>,
+        root_scope: Rc<RefCell<Scope<'a>>>,
+    ) -> OpCodes<'a, T> {
+        let mut op_codes = OpCodes {
             lazy_codes: [Byte::Code(0); ASSEMBLY_SIZE],
+            codes: [0; ASSEMBLY_SIZE],
             unrealized_addresses: vec![],
             strings_to_address: HashMap::new(),
             unrealized_jumps_index: vec![],
@@ -59,10 +62,72 @@ where
             end_heap_range: ASSEMBLY_SIZE - 1,
             marker: PhantomData,
         };
+        op_codes.generate_block(root_production, root_scope);
+        op_codes.generate_codes();
         return op_codes;
     }
 
-    fn generate_block(&self, abstract_node: AbstractNodeEnum<'a>, current_scope: Scope<'a>) {}
+    pub fn print_op_codes(&self) {
+        for (i, code) in self.codes.iter().enumerate() {
+            println!("{:02X}  ", code);
+            if (i + 1) % 8 == 0 {
+                println!();
+            }
+        }
+    }
+
+    fn generate_codes(&mut self) {
+        let mut stack_addresses = vec![];
+        self.add_to_code(Byte::Code(BREAK));
+        for _address in &self.unrealized_addresses {
+            stack_addresses.push(self.last_code_index as u8);
+            self.last_code_index += 1;
+        }
+        for (i, byte) in self.lazy_codes.iter().enumerate() {
+            match byte {
+                Byte::Code(val) => self.codes[i] = *val,
+                Byte::AddressIndex(index) => {
+                    self.codes[i] = stack_addresses[*index];
+                }
+            }
+        }
+    }
+
+    fn generate_block(
+        &mut self,
+        abstract_node_strong: Rc<RefCell<AbstractProduction<'a>>>,
+        current_scope_strong: Rc<RefCell<Scope<'a>>>,
+    ) {
+        let abstract_node = abstract_node_strong.borrow();
+        for abstract_node_enum in &abstract_node.children {
+            match abstract_node_enum {
+                AbstractNodeEnum::AbstractProduction(abstract_production_strong) => {
+                    let abstract_production = abstract_production_strong.borrow();
+                    match abstract_production.abstract_type {
+                        AbstractProductionType::Block => todo!(),
+                        AbstractProductionType::PrintStatement => self.do_print(
+                            abstract_production_strong.clone(),
+                            current_scope_strong.clone(),
+                        ),
+                        AbstractProductionType::AssignmentStatement => self.do_assignment(
+                            abstract_production_strong.clone(),
+                            current_scope_strong.clone(),
+                        ),
+                        AbstractProductionType::VarDecl => self.do_var_decl(
+                            abstract_production_strong.clone(),
+                            current_scope_strong.clone(),
+                        ),
+                        AbstractProductionType::WhileStatement => todo!(),
+                        AbstractProductionType::IfStatement => todo!(),
+                        AbstractProductionType::Add => todo!(),
+                        AbstractProductionType::StringExpr(_) => todo!(),
+                        AbstractProductionType::Boolop(_) => todo!(),
+                    }
+                }
+                AbstractNodeEnum::Terminal(_) => panic!("main block should not get token"),
+            }
+        }
+    }
 
     fn do_var_decl(
         &mut self,
