@@ -61,7 +61,7 @@ pub struct AbstractProduction<'a> {
 }
 
 pub struct AbstractSyntaxTree<'a, T> {
-    root: Rc<RefCell<AbstractProduction<'a>>>,
+    pub root: Rc<RefCell<AbstractProduction<'a>>>,
     last_production: Weak<RefCell<AbstractProduction<'a>>>,
     // only to make the compiler happy ig, but I think the documentation does make me think
     //     this is the correct pattern
@@ -423,7 +423,7 @@ struct MismatchedTypeError<'a> {
 }
 
 pub struct SemanticChecks<'a, T> {
-    scope_root: Rc<RefCell<Scope<'a>>>,
+    pub scope_root: Rc<RefCell<Scope<'a>>>,
     // I was too lazy to do my errors as types (I do kinda reget)
     undeclared_references: Vec<Reference<'a>>,
     uninitialized_reference: Vec<Reference<'a>>,

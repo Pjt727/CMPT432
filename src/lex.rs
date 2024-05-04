@@ -79,7 +79,7 @@ fn get_token(
         } else if character >= '0' && character <= '9' {
             return Some(Token {
                 kind: TokenKind::Digit(Digit {
-                    value: character as u8,
+                    value: character as u8 - '0' as u8,
                 }),
                 start_end_position,
                 line,
@@ -246,7 +246,7 @@ fn fold(
     let mut longest_token: Option<Token> = None;
     for end_range in 1..(buffer.len() + 1) {
         if buffer == "=" && is_recursive_call {
-            continue
+            continue;
         }
         // minus 1 bc it is an exclusive range
         let end_position = start_position + end_range as i32;

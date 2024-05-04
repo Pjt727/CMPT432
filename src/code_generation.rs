@@ -27,10 +27,7 @@ enum Byte {
     AddressIndex(usize),
 }
 
-pub struct OpCodes<'a, T>
-where
-    T: Iterator<Item = &'a Token>,
-{
+pub struct OpCodes<'a> {
     // the codes are lazy in that they won't all be correct
     //    until the end of the program when they are realized
     lazy_codes: [Byte; ASSEMBLY_SIZE],
@@ -41,17 +38,13 @@ where
     unrealized_jumps_index: Vec<usize>,
     last_code_index: usize,
     end_heap_range: usize,
-    marker: PhantomData<T>,
 }
 
-impl<'a, T> OpCodes<'a, T>
-where
-    T: Iterator<Item = &'a Token>,
-{
+impl<'a> OpCodes<'a> {
     fn new(
         root_production: Rc<RefCell<AbstractProduction<'a>>>,
         root_scope: Rc<RefCell<Scope<'a>>>,
-    ) -> OpCodes<'a, T> {
+    ) -> OpCodes<'a> {
         let mut op_codes = OpCodes {
             lazy_codes: [Byte::Code(0); ASSEMBLY_SIZE],
             codes: [0; ASSEMBLY_SIZE],
@@ -60,7 +53,6 @@ where
             unrealized_jumps_index: vec![],
             last_code_index: 0,
             end_heap_range: ASSEMBLY_SIZE - 1,
-            marker: PhantomData,
         };
         op_codes.generate_block(root_production, root_scope);
         op_codes.generate_codes();
@@ -69,8 +61,8 @@ where
 
     pub fn print_op_codes(&self) {
         for (i, code) in self.codes.iter().enumerate() {
-            println!("{:02X}  ", code);
-            if (i + 1) % 8 == 0 {
+            print!("{:02X}  ", code);
+            if (i + 1) % 16 == 0 {
                 println!();
             }
         }
@@ -203,20 +195,22 @@ where
                 }
                 TokenKind::Digit(digit) => {
                     // assign const | a = 1
-                    self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                    dbg!("Here");
+                    self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                    dbg!(digit.value);
                     self.add_to_code(Byte::Code(digit.value));
                     self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
                     self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
                 }
                 TokenKind::Keyword(k) => match k {
                     Keyword::True => {
-                        self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                        self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
                         self.add_to_code(Byte::Code(1));
                         self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
                         self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
                     }
                     Keyword::False => {
-                        self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                        self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
                         self.add_to_code(Byte::Code(1));
                         self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
                         self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
@@ -362,5 +356,61 @@ where
         }
 
         return max_index;
+    }
+}
+
+#[cfg(test)]
+mod generation_tests {
+    use super::*;
+    use crate::lex::*;
+    use crate::parse::*;
+    use std::path::Path;
+    use std::slice::Iter;
+
+    fn helper_get_cst<'a>(tokens: Iter<'a, Token>) -> ConcreteSyntaxTree<'a, Iter<'a, Token>> {
+        let cst = ConcreteSyntaxTree::new(tokens);
+        cst.show_parse_steps();
+        cst.show();
+        if cst.is_err() {
+            panic!("Error duing parse!!");
+        }
+        return cst;
+    }
+
+    fn helper_get_tokens(path_str: &str) -> Vec<Token> {
+        let path = Path::new(&path_str);
+        let lexemes = get_lexemes(path);
+        let mut tokens = vec![];
+        for lexeme in lexemes {
+            match lexeme {
+                Ok(token) => tokens.push(token),
+                Err(lex_problem) => match lex_problem {
+                    LexProblem::LexError(_) => panic!("Error during lex!!"),
+                    LexProblem::LexWarning(_) => continue,
+                },
+            }
+        }
+        return tokens;
+    }
+
+    fn general_helper(path_str: &str) {
+        let tokens = helper_get_tokens(path_str);
+        let cst = helper_get_cst(tokens.iter());
+        let ast = AbstractSyntaxTree::new(cst);
+        let semantic_checks = SemanticChecks::new(&ast);
+        println!("Showing AST:");
+        println!();
+        ast.show();
+        println!("Showing Scope table");
+        println!();
+        println!();
+        semantic_checks.show();
+        let op_codes: OpCodes = OpCodes::new(ast.root, semantic_checks.scope_root);
+        op_codes.print_op_codes();
+    }
+
+    #[test]
+    fn hello_generation() {
+        general_helper("test_cases/code-gen-edge-cases/how_to_print");
     }
 }
