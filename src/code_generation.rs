@@ -23,10 +23,14 @@ const PRINT_Y_OR_MEM: u8 = 0xFF;
 
 const ASSEMBLY_SIZE: usize = 256;
 
+struct RefByte {
+    value: u8,
+}
+
 #[derive(Clone, Copy)]
 enum Byte<'a> {
     Code(u8),
-    Reference(&'a u8),
+    Reference(&'a RefByte),
 }
 
 pub struct OpCodes<'a, T>
@@ -36,7 +40,7 @@ where
     // the codes are lazy in that they won't all be correct
     //    until the end of the program when they are realized
     lazy_codes: [Byte<'a>; ASSEMBLY_SIZE],
-    variable_name_scope_to_address_type: HashMap<(char, Vec<u8>), (u8, DataType)>,
+    variable_name_scope_to_address_type: HashMap<(char, Vec<u8>), (RefByte, DataType)>,
     strings_to_address: HashMap<String, u8>,
     // can be used like a stack to fill in the last jump
     unrealized_jumps_index: Vec<usize>,
@@ -87,8 +91,10 @@ where
             .get(&name)
             .expect("variable should've exists")
             .clone();
-        self.variable_name_scope_to_address_type
-            .insert((name, flat_scope), (TEMP, variable.data_type));
+        self.variable_name_scope_to_address_type.insert(
+            (name, flat_scope),
+            (RefByte { value: TEMP }, variable.data_type),
+        );
     }
 
     fn do_assignment(
@@ -128,6 +134,8 @@ where
                 TokenKind::Id(id) => {
                     let (address, _type) =
                         self.get_variable_info(id.name.clone(), current_scope_strong.clone());
+                    self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                    self.add_variable_reference(address);
                 }
                 TokenKind::Digit(_) => todo!(),
                 TokenKind::StringLiteral => todo!(),
@@ -142,6 +150,12 @@ where
     fn add_to_code(&mut self, byte: Byte<'a>) {
         self.lazy_codes[self.last_code_index] = byte;
         self.last_code_index += 1;
+    }
+
+    // want to make sure I do not forget the 00
+    fn add_variable_reference(&mut self, address: &'a RefByte) {
+        self.add_to_code(Byte::Reference(address));
+        self.add_to_code(Byte::Code(0));
     }
 
     // returns the memory address of the first byte of the string
@@ -163,15 +177,15 @@ where
         &self,
         name: char,
         scope_strong: Rc<RefCell<Scope<'a>>>,
-    ) -> (u8, DataType) {
+    ) -> &(RefByte, DataType) {
         let scope = scope_strong.borrow();
         let mut running_flat_scope = scope.flat_scopes.clone();
-        let mut address_type = None;
+        let mut address_type;
         loop {
             address_type = self
                 .variable_name_scope_to_address_type
                 .get(&(name.clone(), running_flat_scope.clone()));
-            if address_type != None {
+            if address_type.is_none() {
                 break;
             }
             let length = running_flat_scope.len();
@@ -181,6 +195,6 @@ where
             running_flat_scope = running_flat_scope[..running_flat_scope.len() - 1].to_vec();
         }
 
-        return *address_type.unwrap();
+        return address_type.unwrap();
     }
 }
