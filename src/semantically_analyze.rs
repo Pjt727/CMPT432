@@ -408,7 +408,7 @@ pub struct Scope<'a> {
     //   we only would need to make 26 spots in the array to implement a perfect hash
     // I will still leave this as a HashMap type to make Alan happy though
     pub variables: HashMap<char, Variable<'a>>,
-    children: Vec<Rc<RefCell<Scope<'a>>>>,
+    pub children: Vec<Rc<RefCell<Scope<'a>>>>,
     parent: Option<Weak<RefCell<Scope<'a>>>>,
     // represents the path of a variable down the tree could be used to check scope
     // in a flat way

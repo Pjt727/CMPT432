@@ -54,6 +54,7 @@ impl<'a> OpCodes<'a> {
             last_code_index: 0,
             end_heap_index: ASSEMBLY_SIZE,
         };
+        // adding a dummy variable to act as
         op_codes.generate_block(root_production, root_scope);
         op_codes.generate_codes();
         return op_codes;
@@ -91,12 +92,19 @@ impl<'a> OpCodes<'a> {
         current_scope_strong: Rc<RefCell<Scope<'a>>>,
     ) {
         let abstract_node = abstract_node_strong.borrow();
+        let current_scope = current_scope_strong.borrow();
+        let mut child_scopes = current_scope.children.iter();
         for abstract_node_enum in &abstract_node.children {
             match abstract_node_enum {
                 AbstractNodeEnum::AbstractProduction(abstract_production_strong) => {
                     let abstract_production = abstract_production_strong.borrow();
                     match abstract_production.abstract_type {
-                        AbstractProductionType::Block => todo!(),
+                        AbstractProductionType::Block => {
+                            self.generate_block(
+                                abstract_production_strong.clone(),
+                                child_scopes.next().unwrap().clone(),
+                            );
+                        }
                         AbstractProductionType::PrintStatement => self.do_print(
                             abstract_production_strong.clone(),
                             current_scope_strong.clone(),
@@ -111,9 +119,13 @@ impl<'a> OpCodes<'a> {
                         ),
                         AbstractProductionType::WhileStatement => todo!(),
                         AbstractProductionType::IfStatement => todo!(),
-                        AbstractProductionType::Add => todo!(),
-                        AbstractProductionType::StringExpr(_) => todo!(),
-                        AbstractProductionType::Boolop(_) => todo!(),
+                        AbstractProductionType::Add => panic!("main block should not get add"),
+                        AbstractProductionType::StringExpr(_) => {
+                            panic!("main block should not get string")
+                        }
+                        AbstractProductionType::Boolop(_) => {
+                            panic!("main block should not get boolop")
+                        }
                     }
                 }
                 AbstractNodeEnum::Terminal(_) => panic!("main block should not get token"),
@@ -195,9 +207,7 @@ impl<'a> OpCodes<'a> {
                 }
                 TokenKind::Digit(digit) => {
                     // assign const | a = 1
-                    dbg!("Here");
                     self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
-                    dbg!(digit.value);
                     self.add_to_code(Byte::Code(digit.value));
                     self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
                     self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);

@@ -1,11 +1,10 @@
 {
-    string a
+    int a
+    a = 1
     {
-        string a
-        a = "goodbye world"
+        int a
+        a = 2
         print(a)
-
     }
-    a = "hello world"
     print(a)
 }$
