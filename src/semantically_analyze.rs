@@ -503,7 +503,7 @@ where
                                     self.mismatched_types.push(MismatchedTypeError {
                                         token: t.clone().clone(),
                                         scope: scope.clone(),
-                                        data_type: DataType::Boolean,
+                                        data_type: variable_data_type,
                                         expected_data_type: to_match,
                                     })
                                 }
@@ -665,7 +665,7 @@ where
                                         production_strong.clone(),
                                         scope.clone(),
                                         flat_scopes,
-                                        match_type,
+                                        None,
                                         in_assignment,
                                         false,
                                     );

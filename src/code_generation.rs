@@ -16,7 +16,7 @@ const LOAD_Y_MEM: u8 = 0xAC;
 const BREAK: u8 = 0x00;
 const COMPARE_MEM_X_TO_Z: u8 = 0xEC;
 const BRANCH_Z_0: u8 = 0xD0;
-const PRINT_Y_OR_MEM: u8 = 0xFF;
+const PRINT_Y_MEM: u8 = 0xFF;
 
 const ASSEMBLY_SIZE: usize = 256;
 // CHANGE FOR STRINGS
@@ -26,7 +26,8 @@ const LITERALS_MEM: u8 = 254;
 enum Byte {
     Code(u8),
     AddressIndex(usize),
-    Jump,
+    JumpForward,
+    JumpBackward,
 }
 
 pub struct OpCodes<'a> {
@@ -87,7 +88,8 @@ impl<'a> OpCodes<'a> {
                 Byte::AddressIndex(index) => {
                     self.codes[i] = stack_addresses[*index];
                 }
-                Byte::Jump => panic!("jumps should all be resolved"),
+                Byte::JumpForward => panic!("jumps should all be resolved"),
+                Byte::JumpBackward => panic!("jumps should all be resolved"),
             }
         }
     }
@@ -202,7 +204,7 @@ impl<'a> OpCodes<'a> {
                     AbstractProductionType::Boolop(_) => {
                         // do the operation and use the memory address to store
                         //    that value into the variable
-                        let byte = self.do_operation_to_memory(
+                        let byte = self.do_boolean_to_memory(
                             abstract_production_strong.clone(),
                             current_scope_strong.clone(),
                         );
@@ -271,12 +273,23 @@ impl<'a> OpCodes<'a> {
                             self.add_to_code(Byte::Code(address));
                             self.add_to_code(Byte::Code(LOAD_X_CONST));
                             self.add_to_code(Byte::Code(2));
-                            self.add_to_code(Byte::Code(PRINT_Y_OR_MEM));
+                            self.add_to_code(Byte::Code(PRINT_Y_MEM));
                         }
                         _ => panic!("expected string literal"),
                     },
                     AbstractProductionType::Add => todo!(),
-                    AbstractProductionType::Boolop(_) => todo!(),
+                    AbstractProductionType::Boolop(_) => {
+                        let byte = self.do_boolean_to_memory(
+                            abstract_production_strong.clone(),
+                            current_scope_strong.clone(),
+                        );
+                        self.add_to_code(Byte::Code(LOAD_Y_MEM));
+                        self.add_to_code(byte);
+                        self.add_to_code(Byte::Code(0));
+                        self.add_to_code(Byte::Code(LOAD_X_CONST));
+                        self.add_to_code(Byte::Code(1));
+                        self.add_to_code(Byte::Code(PRINT_Y_MEM));
+                    }
                     _ => panic!("unexpected production"),
                 }
             }
@@ -294,7 +307,7 @@ impl<'a> OpCodes<'a> {
                         DataType::String => self.add_to_code(Byte::Code(2)),
                         _ => self.add_to_code(Byte::Code(1)),
                     }
-                    self.add_to_code(Byte::Code(PRINT_Y_OR_MEM));
+                    self.add_to_code(Byte::Code(PRINT_Y_MEM));
                 }
                 TokenKind::Digit(digit) => {
                     // print const | print(1)
@@ -302,7 +315,7 @@ impl<'a> OpCodes<'a> {
                     self.add_to_code(Byte::Code(digit.value));
                     self.add_to_code(Byte::Code(LOAD_X_CONST));
                     self.add_to_code(Byte::Code(1));
-                    self.add_to_code(Byte::Code(PRINT_Y_OR_MEM));
+                    self.add_to_code(Byte::Code(PRINT_Y_MEM));
                 }
                 TokenKind::Keyword(k) => match k {
                     Keyword::True => {
@@ -310,14 +323,14 @@ impl<'a> OpCodes<'a> {
                         self.add_to_code(Byte::Code(1));
                         self.add_to_code(Byte::Code(LOAD_X_CONST));
                         self.add_to_code(Byte::Code(1));
-                        self.add_to_code(Byte::Code(PRINT_Y_OR_MEM));
+                        self.add_to_code(Byte::Code(PRINT_Y_MEM));
                     }
                     Keyword::False => {
                         self.add_to_code(Byte::Code(LOAD_Y_CONST));
                         self.add_to_code(Byte::Code(0));
                         self.add_to_code(Byte::Code(LOAD_X_CONST));
                         self.add_to_code(Byte::Code(1));
-                        self.add_to_code(Byte::Code(PRINT_Y_OR_MEM));
+                        self.add_to_code(Byte::Code(PRINT_Y_MEM));
                     }
                     _ => panic!("unexpected token"),
                 },
@@ -327,7 +340,7 @@ impl<'a> OpCodes<'a> {
     }
 
     // return the memory address which has the result
-    fn do_operation_to_memory(
+    fn do_boolean_to_memory(
         &mut self,
         operation_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
         current_scope_strong: Rc<RefCell<Scope<'a>>>,
@@ -360,7 +373,7 @@ impl<'a> OpCodes<'a> {
                             self.add_to_code(Byte::Code(0));
                             // store true if I dont branch back over it
                             self.add_to_code(Byte::Code(BRANCH_Z_0));
-                            self.add_to_code(Byte::Jump);
+                            self.add_to_code(Byte::JumpForward);
 
                             self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
                             self.add_to_code(Byte::Code(1));
@@ -373,14 +386,15 @@ impl<'a> OpCodes<'a> {
                         Symbol::CheckInequality => {
                             // store true to memory address
                             self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
-                            self.add_to_code(Byte::Code(0));
+                            self.add_to_code(Byte::Code(1));
                             self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+
                             // TODO: change this to a pool of values for nested boolean
                             self.add_to_code(Byte::Code(LITERALS_MEM));
-                            self.add_to_code(Byte::Code(1));
+                            self.add_to_code(Byte::Code(0));
                             // store false if I dont branch back over it
                             self.add_to_code(Byte::Code(BRANCH_Z_0));
-                            self.add_to_code(Byte::Jump);
+                            self.add_to_code(Byte::JumpForward);
 
                             self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
                             self.add_to_code(Byte::Code(0));
@@ -530,7 +544,7 @@ impl<'a> OpCodes<'a> {
     fn resolve_jump_here(&mut self) {
         let mut i = self.next_code_index - 1;
         loop {
-            if matches!(self.lazy_codes[i], Byte::Jump) {
+            if matches!(self.lazy_codes[i], Byte::JumpForward) {
                 self.lazy_codes[i] = Byte::Code((self.next_code_index - i) as u8 - 1);
                 break;
             }
