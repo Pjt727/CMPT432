@@ -2,7 +2,6 @@
 use crate::semantically_analyze::*;
 use crate::token::*;
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::{cell::RefCell, rc::Rc, rc::Weak};
 
 // const are 1 byte and mem are 2 bytes
@@ -15,16 +14,19 @@ const LOAD_X_MEMORY: u8 = 0xAE;
 const LOAD_Y_CONST: u8 = 0xA0;
 const LOAD_Y_MEM: u8 = 0xAC;
 const BREAK: u8 = 0x00;
-const COMPARE_MEM_X_Z: u8 = 0xEC;
+const COMPARE_MEM_X_TO_Z: u8 = 0xEC;
 const BRANCH_Z_0: u8 = 0xD0;
 const PRINT_Y_OR_MEM: u8 = 0xFF;
 
 const ASSEMBLY_SIZE: usize = 256;
+// CHANGE FOR STRINGS
+const LITERALS_MEM: u8 = 254;
 
 #[derive(Clone, Copy)]
 enum Byte {
     Code(u8),
     AddressIndex(usize),
+    Jump,
 }
 
 pub struct OpCodes<'a> {
@@ -36,8 +38,8 @@ pub struct OpCodes<'a> {
     unrealized_addresses: Vec<(Variable<'a>, Vec<u8>)>,
     // can be used like a stack to fill in the last jump
     unrealized_jumps_index: Vec<usize>,
-    last_code_index: usize,
-    end_heap_index: usize,
+    next_code_index: usize,
+    end_heap: usize,
 }
 
 impl<'a> OpCodes<'a> {
@@ -51,8 +53,10 @@ impl<'a> OpCodes<'a> {
             unrealized_addresses: vec![],
             strings_to_address: HashMap::new(),
             unrealized_jumps_index: vec![],
-            last_code_index: 0,
-            end_heap_index: ASSEMBLY_SIZE,
+            next_code_index: 0,
+            // -1 because I use the last address for literals to
+            //  memory addresses
+            end_heap: ASSEMBLY_SIZE - 1,
         };
         // memory space to keep a temp value for in const addition
         //    and boolean ops
@@ -74,8 +78,8 @@ impl<'a> OpCodes<'a> {
         let mut stack_addresses = vec![];
         self.add_to_code(Byte::Code(BREAK));
         for _address in &self.unrealized_addresses {
-            stack_addresses.push(self.last_code_index as u8);
-            self.last_code_index += 1;
+            stack_addresses.push(self.next_code_index as u8);
+            self.next_code_index += 1;
         }
         for (i, byte) in self.lazy_codes.iter().enumerate() {
             match byte {
@@ -83,6 +87,7 @@ impl<'a> OpCodes<'a> {
                 Byte::AddressIndex(index) => {
                     self.codes[i] = stack_addresses[*index];
                 }
+                Byte::Jump => panic!("jumps should all be resolved"),
             }
         }
     }
@@ -194,7 +199,18 @@ impl<'a> OpCodes<'a> {
                         _ => panic!("expected string literal"),
                     },
                     AbstractProductionType::Add => todo!(),
-                    AbstractProductionType::Boolop(_) => todo!(),
+                    AbstractProductionType::Boolop(_) => {
+                        // do the operation and use the memory address to store
+                        //    that value into the variable
+                        let byte = self.do_operation_to_memory(
+                            abstract_production_strong.clone(),
+                            current_scope_strong.clone(),
+                        );
+                        self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                        self.add_to_code(byte);
+                        self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                        self.add_variable_reference(left_hand_id, &current_scope.flat_scopes);
+                    }
                     _ => panic!("unexpected production"),
                 }
             }
@@ -314,7 +330,7 @@ impl<'a> OpCodes<'a> {
         &mut self,
         operation_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
         current_scope_strong: Rc<RefCell<Scope<'a>>>,
-    ) {
+    ) -> Byte {
         let operation_production = operation_production_strong.borrow();
         let current_scope = current_scope_strong.borrow();
 
@@ -326,26 +342,65 @@ impl<'a> OpCodes<'a> {
         match &operation_production.abstract_type {
             AbstractProductionType::Add => todo!(),
             AbstractProductionType::Boolop(t) => match &t.kind {
-                TokenKind::Symbol(s) => match s {
-                    Symbol::CheckEquality => {
-                        // todo implement boolean hell
+                TokenKind::Symbol(s) => {
+                    let byte = self.get_byte_of_node(first_child, &current_scope.flat_scopes);
+                    self.get_node_to_x_register(second_child, &current_scope.flat_scopes);
+                    self.add_to_code(Byte::Code(COMPARE_MEM_X_TO_Z));
+                    self.add_to_code(byte);
+                    self.add_to_code(Byte::Code(0));
+                    match s {
+                        Symbol::CheckEquality => {
+                            // store false to memory address
+                            self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                            self.add_to_code(Byte::Code(0));
+                            self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                            // TODO: change this to a pool of values for nested boolean
+                            self.add_to_code(Byte::Code(LITERALS_MEM));
+                            self.add_to_code(Byte::Code(0));
+                            // store true if I dont branch back over it
+                            self.add_to_code(Byte::Code(BRANCH_Z_0));
+                            self.add_to_code(Byte::Jump);
+
+                            self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                            self.add_to_code(Byte::Code(1));
+                            self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                            // TODO: change this to a pool of values for nested boolean
+                            self.add_to_code(Byte::Code(LITERALS_MEM));
+                            self.add_to_code(Byte::Code(0));
+                            self.resolve_jump_here();
+                        }
+                        Symbol::CheckInequality => {
+                            // store true to memory address
+                            self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                            self.add_to_code(Byte::Code(0));
+                            self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                            // TODO: change this to a pool of values for nested boolean
+                            self.add_to_code(Byte::Code(LITERALS_MEM));
+                            self.add_to_code(Byte::Code(1));
+                            // store false if I dont branch back over it
+                            self.add_to_code(Byte::Code(BRANCH_Z_0));
+                            self.add_to_code(Byte::Jump);
+
+                            self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                            self.add_to_code(Byte::Code(0));
+                            self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                            // TODO: change this to a pool of values for nested boolean
+                            self.add_to_code(Byte::Code(LITERALS_MEM));
+                            self.add_to_code(Byte::Code(0));
+                            self.resolve_jump_here();
+                        }
+                        _ => panic!("expected bool op component"),
                     }
-                    Symbol::CheckInequality => todo!(),
-                    _ => panic!("expected bool op component"),
-                },
+                }
                 _ => panic!("execpeted bool op component"),
             },
             _ => panic!("expected operation"),
         }
+        return Byte::Code(LITERALS_MEM);
     }
 
     // returns the memory reference where the value is
-    fn add_first_child_bool_operation(
-        &mut self,
-        child: &AbstractNodeEnum<'a>,
-        operation_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
-        flat_scope: &Vec<u8>,
-    ) -> Byte {
+    fn get_byte_of_node(&mut self, child: &AbstractNodeEnum<'a>, flat_scope: &Vec<u8>) -> Byte {
         match child {
             AbstractNodeEnum::AbstractProduction(abstract_production_strong) => {
                 let abstract_production = abstract_production_strong.borrow();
@@ -353,11 +408,14 @@ impl<'a> OpCodes<'a> {
                     AbstractProductionType::StringExpr(t) => {
                         self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
                         let heap_address = self.add_to_heap(&t.representation);
-                        self.add_to_code(Byte::Code(heap_address));
                         // mem addresses need be two bytes
-                        self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                        self.add_to_code(Byte::Code(heap_address));
                         self.add_to_code(Byte::Code(0));
-                        return Byte::Code(0);
+
+                        self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                        self.add_to_code(Byte::Code(LITERALS_MEM));
+                        self.add_to_code(Byte::Code(0));
+                        return Byte::Code(LITERALS_MEM);
                     }
                     AbstractProductionType::Boolop(_) => {
                         todo!()
@@ -378,10 +436,59 @@ impl<'a> OpCodes<'a> {
                         _ => panic!("expected true/ false"),
                     };
                     self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                    self.add_to_code(Byte::Code(LITERALS_MEM));
                     self.add_to_code(Byte::Code(0));
-                    return Byte::Code(0);
+                    return Byte::Code(LITERALS_MEM);
                 }
-                TokenKind::Digit(digit) => {}
+                TokenKind::Digit(digit) => {
+                    self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                    self.add_to_code(Byte::Code(digit.value as u8));
+                    self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                    self.add_to_code(Byte::Code(LITERALS_MEM));
+                    self.add_to_code(Byte::Code(0));
+                    return Byte::Code(LITERALS_MEM);
+                }
+                _ => panic!("expected literal or reference"),
+            },
+        }
+    }
+
+    fn get_node_to_x_register(&mut self, child: &AbstractNodeEnum<'a>, flat_scope: &Vec<u8>) {
+        match child {
+            AbstractNodeEnum::AbstractProduction(abstract_production_strong) => {
+                let abstract_production = abstract_production_strong.borrow();
+                match &abstract_production.abstract_type {
+                    AbstractProductionType::StringExpr(t) => {
+                        self.add_to_code(Byte::Code(LOAD_X_MEMORY));
+                        let heap_address = self.add_to_heap(&t.representation);
+                        self.add_to_code(Byte::Code(heap_address));
+                        self.add_to_code(Byte::Code(0));
+                    }
+                    AbstractProductionType::Boolop(_) => {
+                        todo!()
+                    }
+                    _ => panic!(),
+                }
+            }
+            AbstractNodeEnum::Terminal(t) => match &t.kind {
+                TokenKind::Id(id) => {
+                    let index = self.get_unrealized_index(id.name, flat_scope);
+                    self.add_to_code(Byte::Code(LOAD_X_MEMORY));
+                    self.add_to_code(Byte::AddressIndex(index));
+                    self.add_to_code(Byte::Code(0));
+                }
+                TokenKind::Keyword(k) => {
+                    self.add_to_code(Byte::Code(LOAD_X_CONST));
+                    match k {
+                        Keyword::True => self.add_to_code(Byte::Code(1)),
+                        Keyword::False => self.add_to_code(Byte::Code(0)),
+                        _ => panic!("expected true/ false"),
+                    };
+                }
+                TokenKind::Digit(digit) => {
+                    self.add_to_code(Byte::Code(LOAD_X_CONST));
+                    self.add_to_code(Byte::Code(digit.value as u8));
+                }
                 _ => panic!("expected literal or reference"),
             },
         }
@@ -389,8 +496,8 @@ impl<'a> OpCodes<'a> {
 
     // want to make sure I never go out of sync
     fn add_to_code(&mut self, byte: Byte) {
-        self.lazy_codes[self.last_code_index] = byte;
-        self.last_code_index += 1;
+        self.lazy_codes[self.next_code_index] = byte;
+        self.next_code_index += 1;
     }
 
     fn add_variable_reference(&mut self, name: char, reference_flat_scope: &Vec<u8>) {
@@ -406,17 +513,31 @@ impl<'a> OpCodes<'a> {
             return existing_address.clone();
         }
         let length = string.len();
-        dbg!(self.end_heap_index, length);
+        dbg!(self.end_heap, length);
         // leave a 0
-        self.end_heap_index -= length + 1;
+        self.end_heap -= length + 1;
         for (i, char) in string.chars().enumerate() {
             let byte = Byte::Code(char as u8);
-            self.lazy_codes[i + self.end_heap_index] = byte;
+            self.lazy_codes[i + self.end_heap] = byte;
         }
-        let new_address = self.end_heap_index as u8;
+        let new_address = self.end_heap as u8;
         self.strings_to_address.insert(string.clone(), new_address);
         return new_address;
     }
+
+    // makes the last jump go to this the next code index
+    fn resolve_jump_here(&mut self) {
+        let mut i = self.next_code_index - 1;
+        loop {
+            if matches!(self.lazy_codes[i], Byte::Jump) {
+                self.lazy_codes[i] = Byte::Code((self.next_code_index - i) as u8 + 1);
+                break;
+            }
+            i -= 1;
+        }
+    }
+
+    fn add_jump_stack(&mut self) {}
 
     // using my flat scope to get the correct variable in scope
     //    I am not really convinced this is easier than how I did in in SE
@@ -503,6 +624,6 @@ mod generation_tests {
 
     #[test]
     fn hello_generation() {
-        general_helper("test_cases/code-gen-edge-cases/how_to_print");
+        general_helper("test_cases/code-gen-edge-cases/changing");
     }
 }
