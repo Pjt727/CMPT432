@@ -1,5 +1,11 @@
 {
-    int a
-    a = 1
+    string a
+    {
+        string a
+        a = "goodbye world"
+        print(a)
+
+    }
+    a = "hello world"
     print(a)
 }$

@@ -37,7 +37,7 @@ pub struct OpCodes<'a> {
     // can be used like a stack to fill in the last jump
     unrealized_jumps_index: Vec<usize>,
     last_code_index: usize,
-    end_heap_range: usize,
+    end_heap_index: usize,
 }
 
 impl<'a> OpCodes<'a> {
@@ -52,7 +52,7 @@ impl<'a> OpCodes<'a> {
             strings_to_address: HashMap::new(),
             unrealized_jumps_index: vec![],
             last_code_index: 0,
-            end_heap_range: ASSEMBLY_SIZE - 1,
+            end_heap_index: ASSEMBLY_SIZE,
         };
         op_codes.generate_block(root_production, root_scope);
         op_codes.generate_codes();
@@ -316,14 +316,15 @@ impl<'a> OpCodes<'a> {
 
     // returns the memory address of the first byte of the string
     fn add_to_heap(&mut self, string: &String) -> u8 {
-        let mut chars = string.chars();
         let length = string.len();
-        for i in (self.end_heap_range - length)..self.end_heap_range {
-            let byte = Byte::Code(chars.nth(i).unwrap() as u8);
-            self.lazy_codes[i] = byte;
+        dbg!(self.end_heap_index, length);
+        // leave a 0
+        self.end_heap_index -= length + 1;
+        for (i, char) in string.chars().enumerate() {
+            let byte = Byte::Code(char as u8);
+            self.lazy_codes[i + self.end_heap_index] = byte;
         }
-        self.end_heap_range -= length;
-        return self.end_heap_range as u8;
+        return self.end_heap_index as u8;
     }
 
     // using my flat scope to get the correct variable in scope
