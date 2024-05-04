@@ -86,8 +86,9 @@ where
             .get(&name)
             .expect("variable should've exists")
             .clone();
+
         self.unrealized_addresses
-            .push((variable, Rc::downgrade(&current_scope_strong)))
+            .push((variable, current_scope.flat_scopes.clone()))
     }
 
     fn do_assignment(
@@ -98,11 +99,9 @@ where
         let decl_production = assignment_production_strong.borrow();
         let mut type_var_nodes = decl_production.children.iter();
         let variable_name = type_var_nodes.next().unwrap();
-        let name = match variable_name {
+        let left_hand_id = match variable_name {
             AbstractNodeEnum::Terminal(t) => match &t.kind {
-                TokenKind::Id(id) => {
-                    id.name;
-                }
+                TokenKind::Id(id) => id.name,
                 _ => panic!("Expected token"),
             },
             AbstractNodeEnum::AbstractProduction(_) => panic!("Expected terminal"),
@@ -115,7 +114,13 @@ where
                 let abstract_production = abstract_production_strong.borrow();
                 match &abstract_production.abstract_type {
                     AbstractProductionType::StringExpr(string) => match string.kind {
-                        TokenKind::StringLiteral => {}
+                        TokenKind::StringLiteral => {
+                            let address = self.add_to_heap(&string.representation);
+                            self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                            self.add_to_code(Byte::Code(address));
+                            self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                            self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
+                        }
                         _ => panic!("expected string literal"),
                     },
                     AbstractProductionType::Add => todo!(),
@@ -124,18 +129,45 @@ where
                 }
             }
             AbstractNodeEnum::Terminal(t) => match &t.kind {
-                TokenKind::Id(id) => {
+                TokenKind::Id(right_hand_id) => {
+                    // assign var | ex:   a = b
                     self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
-                    self.add_variable_reference(address);
+                    self.add_memory_reference(right_hand_id.name, &current_scope.flat_scopes);
+                    self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                    self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
                 }
-                TokenKind::Digit(_) => todo!(),
-                TokenKind::StringLiteral => todo!(),
+                TokenKind::Digit(digit) => {
+                    // assign const | a = 1
+                    self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                    self.add_to_code(Byte::Code(digit.value));
+                    self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                    self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
+                },
+                TokenKind::Keyword(k) => {
+                    match k {
+                        Keyword::True => {
+                            self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                            self.add_to_code(Byte::Code(1));
+                            self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                            self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
+                        },
+                        Keyword::False => {
+                            self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                            self.add_to_code(Byte::Code(1));
+                            self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                            self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
+                        },
+                        _ => panic!("unexpected token")
+                    }
+                }
                 _ => panic!("unexpected token"),
             },
         }
     }
 
-    fn do_expression_to_memory(&mut self) {}
+    fn do_expression_to_memory(&mut self) {
+        todo!()
+    }
 
     // want to make sure I never go out of sync
     fn add_to_code(&mut self, byte: Byte) {
@@ -144,13 +176,14 @@ where
     }
 
     // want to make sure I do not forget the 00
-    fn add_variable_reference(&mut self, address: usize) {
-        self.add_to_code(Byte::AddressIndex(address));
+    fn add_memory_reference(&mut self, name: char, reference_flat_scope: &Vec<u8>) {
+        let index = self.get_unrealized_index(name, reference_flat_scope);
+        self.add_to_code(Byte::AddressIndex(index));
         self.add_to_code(Byte::Code(0));
     }
 
     // returns the memory address of the first byte of the string
-    fn add_to_heap(&mut self, string: String) -> u8 {
+    fn add_to_heap(&mut self, string: &String) -> u8 {
         let mut chars = string.chars();
         let length = string.len();
         for i in (self.end_heap_range - length)..self.end_heap_range {
@@ -164,15 +197,13 @@ where
     // using my flat scope to get the correct variable in scope
     //    I am not really convinced this is easier than how I did in in SE
     //    but
-    fn get_unrealized_index(&self, name: char, scope_strong: Rc<RefCell<Scope<'a>>>) -> usize {
-        let scope = scope_strong.borrow();
-        let mut reference_flat_scope = scope.flat_scopes.clone();
-
-        let mut max_index;
-        let mut max_shared_scopes;
-        for (i, (_, init_scope)) in self.unrealized_addresses.iter().enumerate() {
-            // cannot reference a variable in a child scope
-            if init_scope.len() > reference_flat_scope.len() {
+    fn get_unrealized_index(&self, name: char, reference_flat_scope: &Vec<u8>) -> usize {
+        //  im sure there is a better way
+        let mut max_index = 69;
+        let mut max_shared_scopes = -420;
+        for (i, (variable, init_scope)) in self.unrealized_addresses.iter().enumerate() {
+            // cannot reference a variable in a child scope or that does not share a name
+            if init_scope.len() > reference_flat_scope.len() || variable.get_name() != name {
                 continue;
             }
             let mut running_count = 0;

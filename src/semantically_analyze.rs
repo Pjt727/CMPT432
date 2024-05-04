@@ -394,6 +394,15 @@ pub struct Variable<'a> {
     pub data_type: DataType,
 }
 
+impl<'a> Variable<'a> {
+    pub fn get_name(&self) -> char {
+        match &self.token.kind {
+            TokenKind::Id(id) => id.name,
+            _ => panic!("note a variable toke nkind"),
+        }
+    }
+}
+
 pub struct Scope<'a> {
     // A very simple perfect hash exists for char's and in our care
     //   we only would need to make 26 spots in the array to implement a perfect hash

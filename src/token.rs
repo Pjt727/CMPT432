@@ -108,7 +108,7 @@ pub enum TokenKind {
     Symbol(Symbol),
     Digit(Digit),
     Char(Char),
-    StringLiteral,
+    StringLiteral,// go get it from the rep
 }
 
 impl Clone for TokenKind {
