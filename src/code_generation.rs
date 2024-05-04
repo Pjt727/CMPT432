@@ -54,7 +54,8 @@ impl<'a> OpCodes<'a> {
             last_code_index: 0,
             end_heap_index: ASSEMBLY_SIZE,
         };
-        // adding a dummy variable to act as
+        // memory space to keep a temp value for in const addition
+        //    and boolean ops
         op_codes.generate_block(root_production, root_scope);
         op_codes.generate_codes();
         return op_codes;
@@ -188,7 +189,7 @@ impl<'a> OpCodes<'a> {
                             self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
                             self.add_to_code(Byte::Code(address));
                             self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
-                            self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
+                            self.add_variable_reference(left_hand_id, &current_scope.flat_scopes);
                         }
                         _ => panic!("expected string literal"),
                     },
@@ -201,29 +202,29 @@ impl<'a> OpCodes<'a> {
                 TokenKind::Id(right_hand_id) => {
                     // assign var | ex:   a = b
                     self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
-                    self.add_memory_reference(right_hand_id.name, &current_scope.flat_scopes);
+                    self.add_variable_reference(right_hand_id.name, &current_scope.flat_scopes);
                     self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
-                    self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
+                    self.add_variable_reference(left_hand_id, &current_scope.flat_scopes);
                 }
                 TokenKind::Digit(digit) => {
                     // assign const | a = 1
                     self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
                     self.add_to_code(Byte::Code(digit.value));
                     self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
-                    self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
+                    self.add_variable_reference(left_hand_id, &current_scope.flat_scopes);
                 }
                 TokenKind::Keyword(k) => match k {
                     Keyword::True => {
                         self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
                         self.add_to_code(Byte::Code(1));
                         self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
-                        self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
+                        self.add_variable_reference(left_hand_id, &current_scope.flat_scopes);
                     }
                     Keyword::False => {
                         self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
                         self.add_to_code(Byte::Code(1));
                         self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
-                        self.add_memory_reference(left_hand_id, &current_scope.flat_scopes);
+                        self.add_variable_reference(left_hand_id, &current_scope.flat_scopes);
                     }
                     _ => panic!("unexpected token"),
                 },
@@ -270,7 +271,7 @@ impl<'a> OpCodes<'a> {
                     //     immutable and mutable burrows of self with 'a or something
                     let (variable, _scope) = self.unrealized_addresses[var_index].clone();
                     self.add_to_code(Byte::Code(LOAD_Y_MEM));
-                    self.add_memory_reference(id.name, &current_scope.flat_scopes);
+                    self.add_variable_reference(id.name, &current_scope.flat_scopes);
                     self.add_to_code(Byte::Code(LOAD_X_CONST));
                     match &variable.data_type {
                         DataType::String => self.add_to_code(Byte::Code(2)),
@@ -308,8 +309,82 @@ impl<'a> OpCodes<'a> {
         }
     }
 
-    fn do_expression_to_memory(&mut self) {
-        todo!()
+    // return the memory address which has the result
+    fn do_operation_to_memory(
+        &mut self,
+        operation_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
+        current_scope_strong: Rc<RefCell<Scope<'a>>>,
+    ) {
+        let operation_production = operation_production_strong.borrow();
+        let current_scope = current_scope_strong.borrow();
+
+        // should only be two children
+        let children = &operation_production.children;
+        let first_child = &children[0];
+        let second_child = &children[1];
+
+        match &operation_production.abstract_type {
+            AbstractProductionType::Add => todo!(),
+            AbstractProductionType::Boolop(t) => match &t.kind {
+                TokenKind::Symbol(s) => match s {
+                    Symbol::CheckEquality => {
+                        // todo implement boolean hell
+                    }
+                    Symbol::CheckInequality => todo!(),
+                    _ => panic!("expected bool op component"),
+                },
+                _ => panic!("execpeted bool op component"),
+            },
+            _ => panic!("expected operation"),
+        }
+    }
+
+    // returns the memory reference where the value is
+    fn add_first_child_bool_operation(
+        &mut self,
+        child: &AbstractNodeEnum<'a>,
+        operation_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
+        flat_scope: &Vec<u8>,
+    ) -> Byte {
+        match child {
+            AbstractNodeEnum::AbstractProduction(abstract_production_strong) => {
+                let abstract_production = abstract_production_strong.borrow();
+                match &abstract_production.abstract_type {
+                    AbstractProductionType::StringExpr(t) => {
+                        self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                        let heap_address = self.add_to_heap(&t.representation);
+                        self.add_to_code(Byte::Code(heap_address));
+                        // mem addresses need be two bytes
+                        self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                        self.add_to_code(Byte::Code(0));
+                        return Byte::Code(0);
+                    }
+                    AbstractProductionType::Boolop(_) => {
+                        todo!()
+                    }
+                    _ => panic!(),
+                }
+            }
+            AbstractNodeEnum::Terminal(t) => match &t.kind {
+                TokenKind::Id(id) => {
+                    let index = self.get_unrealized_index(id.name, flat_scope);
+                    return Byte::AddressIndex(index);
+                }
+                TokenKind::Keyword(k) => {
+                    self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                    match k {
+                        Keyword::True => self.add_to_code(Byte::Code(1)),
+                        Keyword::False => self.add_to_code(Byte::Code(0)),
+                        _ => panic!("expected true/ false"),
+                    };
+                    self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                    self.add_to_code(Byte::Code(0));
+                    return Byte::Code(0);
+                }
+                TokenKind::Digit(digit) => {}
+                _ => panic!("expected literal or reference"),
+            },
+        }
     }
 
     // want to make sure I never go out of sync
@@ -318,14 +393,18 @@ impl<'a> OpCodes<'a> {
         self.last_code_index += 1;
     }
 
-    fn add_memory_reference(&mut self, name: char, reference_flat_scope: &Vec<u8>) {
+    fn add_variable_reference(&mut self, name: char, reference_flat_scope: &Vec<u8>) {
         let index = self.get_unrealized_index(name, reference_flat_scope);
         self.add_to_code(Byte::AddressIndex(index));
         self.add_to_code(Byte::Code(0));
     }
 
     // returns the memory address of the first byte of the string
+    //   creating one if needed
     fn add_to_heap(&mut self, string: &String) -> u8 {
+        if let Some(existing_address) = self.strings_to_address.get(string) {
+            return existing_address.clone();
+        }
         let length = string.len();
         dbg!(self.end_heap_index, length);
         // leave a 0
@@ -334,7 +413,9 @@ impl<'a> OpCodes<'a> {
             let byte = Byte::Code(char as u8);
             self.lazy_codes[i + self.end_heap_index] = byte;
         }
-        return self.end_heap_index as u8;
+        let new_address = self.end_heap_index as u8;
+        self.strings_to_address.insert(string.clone(), new_address);
+        return new_address;
     }
 
     // using my flat scope to get the correct variable in scope
