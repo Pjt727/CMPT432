@@ -857,7 +857,7 @@ where
         }
     }
 
-    fn get_err_count(&self) -> usize {
+    pub fn get_err_count(&self) -> usize {
         &self.uninitialized_reference.len()
             + &self.redeclared_variables.len()
             + &self.undeclared_references.len()

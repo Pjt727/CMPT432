@@ -1,8 +1,9 @@
 #![allow(dead_code)]
 use crate::semantically_analyze::*;
 use crate::token::*;
+use colored::Colorize;
 use std::collections::HashMap;
-use std::{cell::RefCell, rc::Rc, rc::Weak};
+use std::{cell::RefCell, rc::Rc};
 
 // const are 1 byte and mem are 2 bytes
 const LOAD_ACCUM_CONST: u8 = 0xA9;
@@ -44,7 +45,7 @@ pub struct OpCodes<'a> {
 }
 
 impl<'a> OpCodes<'a> {
-    fn new(
+    pub fn new(
         root_production: Rc<RefCell<AbstractProduction<'a>>>,
         root_scope: Rc<RefCell<Scope<'a>>>,
     ) -> OpCodes<'a> {
@@ -56,7 +57,7 @@ impl<'a> OpCodes<'a> {
             unrealized_backward_jumps_index: vec![],
             next_code_index: 0,
             did_fit_codes: true,
-            // -1 because I use the last address booleans
+            // -1 because I use the last address for temp storage
             end_heap: ASSEMBLY_SIZE - 1,
         };
         // memory space to keep a temp value for in const addition
@@ -67,6 +68,15 @@ impl<'a> OpCodes<'a> {
     }
 
     pub fn print_op_codes(&self) {
+        if !self.did_fit_codes {
+            println!(
+                "{} can only generate up to {} bytes!",
+                "Op Codes Do not Fit".red(),
+                ASSEMBLY_SIZE
+            );
+            return;
+        }
+        println!("{}", "6502 Op Codes".magenta());
         for (i, code) in self.codes.iter().enumerate() {
             print!("{:02X}  ", code);
             if (i + 1) % 16 == 0 {
@@ -840,7 +850,6 @@ impl<'a> OpCodes<'a> {
             return existing_address.clone();
         }
         let length = string.len();
-        dbg!(self.end_heap, length);
         // leave a 0
         self.end_heap -= length + 1;
         for (i, char) in string.chars().enumerate() {
@@ -908,6 +917,10 @@ impl<'a> OpCodes<'a> {
     }
 }
 
+// Like I was / am really tempted to actually implement the op codes to run
+//    programmatic tests but still that would originally need to be validate by the website
+// Technically I could do some crazieness and use a script which going to the website and gets
+//    the result but that's too much work
 #[cfg(test)]
 mod generation_tests {
     use super::*;

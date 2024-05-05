@@ -3,10 +3,10 @@ use std::fs;
 use std::path::Path;
 mod lex;
 use colored::Colorize;
+mod code_generation;
 mod parse;
 mod semantically_analyze;
 mod token;
-mod code_generation;
 
 fn compile_steps(file: &Path) {
     let token_entries = lex::get_lexemes(file);
@@ -77,11 +77,23 @@ fn compile_steps(file: &Path) {
                     "{} for program {}",
                     "Starting Semantic Analysis".magenta(),
                     programs_processed
-                    );
-                println!( "{}", "Showing AST".magenta());
+                );
+                println!("{}", "Showing AST".magenta());
                 ast.show();
                 let semantic_checks = semantically_analyze::SemanticChecks::new(&ast);
                 semantic_checks.show();
+                println!();
+                if semantic_checks.get_err_count() > 0 {
+                    println!(
+                        "{} because of semantic error(s).",
+                        "Skipping Code Gen".red()
+                    )
+                } else {
+                    let op_codes: code_generation::OpCodes =
+                        code_generation::OpCodes::new(ast.root, semantic_checks.scope_root);
+                    op_codes.print_op_codes();
+                }
+
                 println!();
             }
         } else {

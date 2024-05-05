@@ -32,14 +32,14 @@
    /* while loop */
    while(a != 3) {
        print(a)
-           while(b != 3) {
-               print(b)
-               b = 1 + b
-               if(b == 2) {
-                   print("dammit janet")
-               }
+       while(b != 3) {
+           print(b)
+           b = 1 + b
+           if(b == 2) {
+               print("dammit janet")
            }
-           b=0
-           a=1+a
+       }
+       b=0
+       a=1+a
    }
 }
