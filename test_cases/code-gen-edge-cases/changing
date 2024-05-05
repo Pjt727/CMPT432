@@ -1,71 +1,11 @@
 {
-    /*
-    if (true == true) {
-        print("a")
+    int a
+    a = 5
+    {
+        int a
+        a = 4
+        print(a)
     }
-    if (true == false) {
-        print("b")
-    }
-    if (false == true) {
-        print("c")
-    }
-    if (false == false) {
-        print("d")
-    }
-    */
-
-/*
-    boolean a
-    boolean b
-    a = true
-    b = false
-
-    if (a == a) {
-        print("a")
-    }
-    if (a == b) {
-        print("b")
-    }
-    if (b == a) {
-        print("c")
-    }
-    if (b == b) {
-        print("d")
-    }
-    */
-    /*
-    boolean a
-    a = true
-
-    if (a == true) {
-        print("a")
-    }
-    if (a == false) {
-        print("b")
-    }
-    if (true == a) {
-        print("c")
-    }
-    if (false == a) {
-        print("d")
-    }
-    */
-
-    boolean a
-    a = false
     print(a)
-
-    if (a == true) {
-        print("a")
-    }
-    if (a == false) {
-        print("b")
-    }
-    if (true == a) {
-        print("c")
-    }
-    if (false == a) {
-        print("d")
-    }
-    
 }$
+

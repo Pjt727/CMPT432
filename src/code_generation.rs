@@ -34,10 +34,11 @@ pub struct OpCodes<'a> {
     //    until the end of the program when they are realized
     lazy_codes: [Byte; ASSEMBLY_SIZE],
     codes: [u8; ASSEMBLY_SIZE],
+    did_fit_codes: bool,
     strings_to_address: HashMap<String, u8>,
     unrealized_addresses: Vec<(Variable<'a>, Vec<u8>)>,
     // can be used like a stack to fill in the last jump
-    unrealized_jumps_index: Vec<usize>,
+    unrealized_backward_jumps_index: Vec<usize>,
     next_code_index: usize,
     end_heap: usize,
 }
@@ -52,8 +53,9 @@ impl<'a> OpCodes<'a> {
             codes: [0; ASSEMBLY_SIZE],
             unrealized_addresses: vec![],
             strings_to_address: HashMap::new(),
-            unrealized_jumps_index: vec![],
+            unrealized_backward_jumps_index: vec![],
             next_code_index: 0,
+            did_fit_codes: true,
             // -1 because I use the last address booleans
             end_heap: ASSEMBLY_SIZE - 1,
         };
@@ -78,6 +80,11 @@ impl<'a> OpCodes<'a> {
         self.add_to_code(Byte::Code(BREAK));
         for _address in &self.unrealized_addresses {
             stack_addresses.push(self.next_code_index as u8);
+            // initing 0
+            if self.next_code_index >= self.end_heap {
+                self.did_fit_codes = false;
+                return;
+            }
             self.next_code_index += 1;
         }
         for (i, byte) in self.lazy_codes.iter().enumerate() {
@@ -122,7 +129,11 @@ impl<'a> OpCodes<'a> {
                             abstract_production_strong.clone(),
                             current_scope_strong.clone(),
                         ),
-                        AbstractProductionType::WhileStatement => todo!(),
+                        AbstractProductionType::WhileStatement => self.do_while_statement(
+                            abstract_production_strong.clone(),
+                            current_scope_strong.clone(),
+                            children_scopes.next().unwrap().clone(),
+                        ),
                         AbstractProductionType::IfStatement => self.do_if_statement(
                             abstract_production_strong.clone(),
                             current_scope_strong.clone(),
@@ -140,6 +151,98 @@ impl<'a> OpCodes<'a> {
                 AbstractNodeEnum::Terminal(_) => panic!("main block should not get token"),
             }
         }
+    }
+
+    fn do_while_statement(
+        &mut self,
+        while_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
+        current_scope_strong: Rc<RefCell<Scope<'a>>>,
+        while_scope_strong: Rc<RefCell<Scope<'a>>>,
+    ) {
+        let if_production = while_production_strong.borrow();
+        let current_scope = current_scope_strong.borrow();
+
+        let children = &if_production.children;
+        let first_child = &children[0];
+        let block_child = &children[1];
+
+        match first_child {
+            AbstractNodeEnum::AbstractProduction(strong_abstract_production) => {
+                let abstract_production = strong_abstract_production.borrow();
+                match abstract_production.abstract_type {
+                    AbstractProductionType::Boolop(_) => {
+                        // could do some optimizations here bc z flag is
+                        //    always copied to mem for simplicity
+                        //    even if that's the z flag we want
+                        self.push_jump_stack(); // anchor this next instruction to go back to
+                        let byte = self.do_boolean_to_memory(
+                            strong_abstract_production.clone(),
+                            current_scope_strong.clone(),
+                        );
+                        self.add_to_code(Byte::Code(LOAD_X_CONST));
+                        self.add_to_code(Byte::Code(1));
+                        self.add_to_code(Byte::Code(COMPARE_MEM_X_TO_Z));
+                        self.add_to_code(byte);
+                        self.add_to_code(Byte::Code(0));
+                        self.add_to_code(Byte::Code(BRANCH_Z_0));
+                        self.add_to_code(Byte::JumpForward);
+                    }
+                    _ => panic!("expected bool op"),
+                }
+            }
+            AbstractNodeEnum::Terminal(t) => {
+                match &t.kind {
+                    TokenKind::Keyword(k) => match k {
+                        Keyword::True => todo!(),
+                        Keyword::False => todo!(),
+                        _ => panic!("expected true/false"),
+                    },
+                    TokenKind::Id(id) => {
+                        // load true to x register to set up compare
+                        self.add_to_code(Byte::Code(LOAD_X_CONST));
+                        self.add_to_code(Byte::Code(1));
+                        self.add_to_code(Byte::Code(COMPARE_MEM_X_TO_Z));
+                        self.add_variable_reference(id.name, &current_scope.flat_scopes);
+                        self.add_to_code(Byte::Code(BRANCH_Z_0));
+                        self.add_to_code(Byte::JumpForward);
+                    }
+                    _ => panic!("expected boolean"),
+                }
+            }
+        }
+
+        match block_child {
+            AbstractNodeEnum::AbstractProduction(strong_abstract_production) => {
+                let abstract_production = strong_abstract_production.borrow();
+                match abstract_production.abstract_type {
+                    AbstractProductionType::Block => {
+                        self.generate_block(
+                            strong_abstract_production.clone(),
+                            while_scope_strong.clone(),
+                        );
+                    }
+                    _ => panic!("expected block"),
+                }
+            }
+            AbstractNodeEnum::Terminal(_) => panic!("expected block"),
+        }
+
+        // unconditional jump back
+        self.add_to_code(Byte::Code(LOAD_X_CONST));
+        self.add_to_code(Byte::Code(0));
+        self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+        self.add_to_code(Byte::Code(1));
+        self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+        self.add_to_code(Byte::Code(RESERVED_MEM1));
+        self.add_to_code(Byte::Code(0));
+        self.add_to_code(Byte::Code(COMPARE_MEM_X_TO_Z));
+        self.add_to_code(Byte::Code(RESERVED_MEM1));
+        self.add_to_code(Byte::Code(0));
+        self.add_to_code(Byte::Code(BRANCH_Z_0));
+        let jump_back = self.pop_jump_stack();
+        self.add_to_code(Byte::Code(jump_back));
+        // false of while loop
+        self.resolve_jump_here();
     }
 
     fn do_if_statement(
@@ -181,8 +284,34 @@ impl<'a> OpCodes<'a> {
             AbstractNodeEnum::Terminal(t) => {
                 match &t.kind {
                     TokenKind::Keyword(k) => match k {
-                        Keyword::True => todo!(),
-                        Keyword::False => todo!(),
+                        // obviously useless idk if we're allowed to optimize this tho
+                        Keyword::True => {
+                            self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                            self.add_to_code(Byte::Code(1));
+                            self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                            self.add_to_code(Byte::Code(RESERVED_MEM1));
+                            self.add_to_code(Byte::Code(0));
+                            self.add_to_code(Byte::Code(LOAD_X_CONST));
+                            self.add_to_code(Byte::Code(1));
+                            self.add_to_code(Byte::Code(COMPARE_MEM_X_TO_Z));
+                            self.add_to_code(Byte::Code(RESERVED_MEM1));
+                            self.add_to_code(Byte::Code(0));
+                            self.add_to_code(Byte::Code(BRANCH_Z_0));
+                            self.add_to_code(Byte::JumpForward);
+                        }
+                        Keyword::False => {
+                            self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                            self.add_to_code(Byte::Code(0));
+                            self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                            self.add_to_code(Byte::Code(RESERVED_MEM1));
+                            self.add_to_code(Byte::Code(0));
+                            self.add_to_code(Byte::Code(LOAD_X_CONST));
+                            self.add_to_code(Byte::Code(1));
+                            self.add_to_code(Byte::Code(COMPARE_MEM_X_TO_Z));
+                            self.add_to_code(Byte::Code(RESERVED_MEM1));
+                            self.add_to_code(Byte::Code(0));
+                            self.add_to_code(Byte::Code(BRANCH_Z_0));
+                        }
                         _ => panic!("expected true/false"),
                     },
                     TokenKind::Id(id) => {
@@ -685,6 +814,10 @@ impl<'a> OpCodes<'a> {
 
     // want to make sure I never go out of sync
     fn add_to_code(&mut self, byte: Byte) {
+        if self.next_code_index >= self.end_heap {
+            self.did_fit_codes = false;
+            return;
+        }
         self.lazy_codes[self.next_code_index] = byte;
         self.next_code_index += 1;
     }
@@ -698,6 +831,11 @@ impl<'a> OpCodes<'a> {
     // returns the memory address of the first byte of the string
     //   creating one if needed
     fn add_to_heap(&mut self, string: &String) -> u8 {
+        if self.end_heap <= self.next_code_index {
+            self.did_fit_codes = false;
+            // dummy return value
+            return 0;
+        }
         if let Some(existing_address) = self.strings_to_address.get(string) {
             return existing_address.clone();
         }
@@ -726,7 +864,16 @@ impl<'a> OpCodes<'a> {
         }
     }
 
-    fn add_jump_stack(&mut self) {}
+    fn push_jump_stack(&mut self) {
+        self.unrealized_backward_jumps_index
+            .push(self.next_code_index);
+    }
+
+    fn pop_jump_stack(&mut self) -> u8 {
+        let to_index = self.unrealized_backward_jumps_index.pop().unwrap();
+        let difference = self.next_code_index - to_index;
+        return ((ASSEMBLY_SIZE - difference) - 1) as u8;
+    }
 
     // using my flat scope to get the correct variable in scope
     //    I am not really convinced this is easier than how I did in in SE

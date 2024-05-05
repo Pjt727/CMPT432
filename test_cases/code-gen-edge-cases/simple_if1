@@ -11,4 +11,10 @@
     if (false == false) {
         print("d")
     }
+    if true {
+        print("e")
+    }
+    if false {
+        print("f")
+    }
 }$
