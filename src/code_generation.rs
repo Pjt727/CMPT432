@@ -98,7 +98,7 @@ impl<'a> OpCodes<'a> {
     ) {
         let abstract_node = abstract_node_strong.borrow();
         let current_scope = current_scope_strong.borrow();
-        let mut child_scopes = current_scope.children.iter();
+        let mut children_scopes = current_scope.children.iter();
         for abstract_node_enum in &abstract_node.children {
             match abstract_node_enum {
                 AbstractNodeEnum::AbstractProduction(abstract_production_strong) => {
@@ -107,7 +107,7 @@ impl<'a> OpCodes<'a> {
                         AbstractProductionType::Block => {
                             self.generate_block(
                                 abstract_production_strong.clone(),
-                                child_scopes.next().unwrap().clone(),
+                                children_scopes.next().unwrap().clone(),
                             );
                         }
                         AbstractProductionType::PrintStatement => self.do_print(
@@ -123,7 +123,11 @@ impl<'a> OpCodes<'a> {
                             current_scope_strong.clone(),
                         ),
                         AbstractProductionType::WhileStatement => todo!(),
-                        AbstractProductionType::IfStatement => todo!(),
+                        AbstractProductionType::IfStatement => self.do_if_statement(
+                            abstract_production_strong.clone(),
+                            current_scope_strong.clone(),
+                            children_scopes.next().unwrap().clone(),
+                        ),
                         AbstractProductionType::Add => panic!("main block should not get add"),
                         AbstractProductionType::StringExpr(_) => {
                             panic!("main block should not get string")
@@ -322,7 +326,7 @@ impl<'a> OpCodes<'a> {
                     }
                     Keyword::False => {
                         self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
-                        self.add_to_code(Byte::Code(1));
+                        self.add_to_code(Byte::Code(0));
                         self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
                         self.add_variable_reference(left_hand_id, &current_scope.flat_scopes);
                     }
@@ -508,6 +512,7 @@ impl<'a> OpCodes<'a> {
             },
         }
     }
+
     // return the memory address which has the result
     fn do_boolean_to_memory(
         &mut self,
