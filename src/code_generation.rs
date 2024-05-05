@@ -20,14 +20,13 @@ const PRINT_Y_MEM: u8 = 0xFF;
 
 const ASSEMBLY_SIZE: usize = 256;
 // CHANGE FOR STRINGS
-const LITERALS_MEM: u8 = 254;
+const RESERVED_MEM1: u8 = 255;
 
 #[derive(Clone, Copy)]
 enum Byte {
     Code(u8),
     AddressIndex(usize),
     JumpForward,
-    JumpBackward,
 }
 
 pub struct OpCodes<'a> {
@@ -55,8 +54,7 @@ impl<'a> OpCodes<'a> {
             strings_to_address: HashMap::new(),
             unrealized_jumps_index: vec![],
             next_code_index: 0,
-            // -1 because I use the last address for literals to
-            //  memory addresses
+            // -1 because I use the last address booleans
             end_heap: ASSEMBLY_SIZE - 1,
         };
         // memory space to keep a temp value for in const addition
@@ -89,7 +87,6 @@ impl<'a> OpCodes<'a> {
                     self.codes[i] = stack_addresses[*index];
                 }
                 Byte::JumpForward => panic!("jumps should all be resolved"),
-                Byte::JumpBackward => panic!("jumps should all be resolved"),
             }
         }
     }
@@ -139,6 +136,82 @@ impl<'a> OpCodes<'a> {
                 AbstractNodeEnum::Terminal(_) => panic!("main block should not get token"),
             }
         }
+    }
+
+    fn do_if_statement(
+        &mut self,
+        if_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
+        current_scope_strong: Rc<RefCell<Scope<'a>>>,
+        if_scope_strong: Rc<RefCell<Scope<'a>>>,
+    ) {
+        let if_production = if_production_strong.borrow();
+        let current_scope = current_scope_strong.borrow();
+
+        let children = &if_production.children;
+        let first_child = &children[0];
+        let block_child = &children[1];
+
+        match first_child {
+            AbstractNodeEnum::AbstractProduction(strong_abstract_production) => {
+                let abstract_production = strong_abstract_production.borrow();
+                match abstract_production.abstract_type {
+                    AbstractProductionType::Boolop(_) => {
+                        // could do some optimizations here bc z flag is
+                        //    always copied to mem for simplicity
+                        //    even if that's the z flag we want
+                        let byte = self.do_boolean_to_memory(
+                            strong_abstract_production.clone(),
+                            current_scope_strong.clone(),
+                        );
+                        self.add_to_code(Byte::Code(LOAD_X_CONST));
+                        self.add_to_code(Byte::Code(1));
+                        self.add_to_code(Byte::Code(COMPARE_MEM_X_TO_Z));
+                        self.add_to_code(byte);
+                        self.add_to_code(Byte::Code(0));
+                        self.add_to_code(Byte::Code(BRANCH_Z_0));
+                        self.add_to_code(Byte::JumpForward);
+                    }
+                    _ => panic!("expected bool op"),
+                }
+            }
+            AbstractNodeEnum::Terminal(t) => {
+                match &t.kind {
+                    TokenKind::Keyword(k) => match k {
+                        Keyword::True => todo!(),
+                        Keyword::False => todo!(),
+                        _ => panic!("expected true/false"),
+                    },
+                    TokenKind::Id(id) => {
+                        // load true to x register to set up compare
+                        self.add_to_code(Byte::Code(LOAD_X_CONST));
+                        self.add_to_code(Byte::Code(1));
+                        self.add_to_code(Byte::Code(COMPARE_MEM_X_TO_Z));
+                        self.add_variable_reference(id.name, &current_scope.flat_scopes);
+                        self.add_to_code(Byte::Code(BRANCH_Z_0));
+                        self.add_to_code(Byte::JumpForward);
+                    }
+                    _ => panic!("expected boolean"),
+                }
+            }
+        }
+
+        match block_child {
+            AbstractNodeEnum::AbstractProduction(strong_abstract_production) => {
+                let abstract_production = strong_abstract_production.borrow();
+                match abstract_production.abstract_type {
+                    AbstractProductionType::Block => {
+                        self.generate_block(
+                            strong_abstract_production.clone(),
+                            if_scope_strong.clone(),
+                        );
+                    }
+                    _ => panic!("expected block"),
+                }
+            }
+            AbstractNodeEnum::Terminal(_) => panic!("expected block"),
+        }
+        // does the if scope
+        self.resolve_jump_here();
     }
 
     fn do_var_decl(
@@ -200,7 +273,15 @@ impl<'a> OpCodes<'a> {
                         }
                         _ => panic!("expected string literal"),
                     },
-                    AbstractProductionType::Add => todo!(),
+                    AbstractProductionType::Add => {
+                        self.do_add_to_agg(
+                            abstract_production_strong.clone(),
+                            current_scope_strong.clone(),
+                            true,
+                        );
+                        self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                        self.add_variable_reference(left_hand_id, &current_scope.flat_scopes);
+                    }
                     AbstractProductionType::Boolop(_) => {
                         // do the operation and use the memory address to store
                         //    that value into the variable
@@ -277,7 +358,22 @@ impl<'a> OpCodes<'a> {
                         }
                         _ => panic!("expected string literal"),
                     },
-                    AbstractProductionType::Add => todo!(),
+                    AbstractProductionType::Add => {
+                        self.do_add_to_agg(
+                            abstract_production_strong.clone(),
+                            current_scope_strong.clone(),
+                            true,
+                        );
+                        self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                        self.add_to_code(Byte::Code(RESERVED_MEM1));
+                        self.add_to_code(Byte::Code(0));
+                        self.add_to_code(Byte::Code(LOAD_Y_MEM));
+                        self.add_to_code(Byte::Code(RESERVED_MEM1));
+                        self.add_to_code(Byte::Code(0));
+                        self.add_to_code(Byte::Code(LOAD_X_CONST));
+                        self.add_to_code(Byte::Code(1));
+                        self.add_to_code(Byte::Code(PRINT_Y_MEM));
+                    }
                     AbstractProductionType::Boolop(_) => {
                         let byte = self.do_boolean_to_memory(
                             abstract_production_strong.clone(),
@@ -339,13 +435,86 @@ impl<'a> OpCodes<'a> {
         }
     }
 
+    fn do_add_to_agg(
+        &mut self,
+        add_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
+        current_scope_strong: Rc<RefCell<Scope<'a>>>,
+        is_first_call: bool,
+    ) {
+        let add_production = add_production_strong.borrow();
+        let current_scope = current_scope_strong.borrow();
+
+        let children = &add_production.children;
+        let first_child = &children[0];
+        let second_child = &children[1];
+
+        match &first_child {
+            AbstractNodeEnum::AbstractProduction(_) => todo!(),
+            AbstractNodeEnum::Terminal(t) => match &t.kind {
+                // first + is always a digit as id's cant appear there
+                TokenKind::Digit(digit) => {
+                    if is_first_call {
+                        self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                        self.add_to_code(Byte::Code(digit.value));
+                    } else {
+                        self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                        self.add_to_code(Byte::Code(RESERVED_MEM1));
+                        self.add_to_code(Byte::Code(0));
+                        self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                        self.add_to_code(Byte::Code(digit.value));
+                        self.add_to_code(Byte::Code(ADD_CARRY));
+                        self.add_to_code(Byte::Code(RESERVED_MEM1));
+                        self.add_to_code(Byte::Code(0));
+                    }
+                }
+                _ => panic!("expected digit"),
+            },
+        }
+
+        match &second_child {
+            AbstractNodeEnum::AbstractProduction(abstract_production_strong) => {
+                let abstract_production = abstract_production_strong.borrow();
+                match abstract_production.abstract_type {
+                    AbstractProductionType::Add => self.do_add_to_agg(
+                        abstract_production_strong.clone(),
+                        current_scope_strong.clone(),
+                        false,
+                    ),
+                    _ => panic!("expected add"),
+                }
+            }
+            AbstractNodeEnum::Terminal(t) => match &t.kind {
+                TokenKind::Id(id) => {
+                    self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                    self.add_to_code(Byte::Code(RESERVED_MEM1));
+                    self.add_to_code(Byte::Code(0));
+                    self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                    self.add_variable_reference(id.name, &current_scope.flat_scopes);
+                    self.add_to_code(Byte::Code(ADD_CARRY));
+                    self.add_to_code(Byte::Code(RESERVED_MEM1));
+                    self.add_to_code(Byte::Code(0));
+                }
+                TokenKind::Digit(digit) => {
+                    self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                    self.add_to_code(Byte::Code(RESERVED_MEM1));
+                    self.add_to_code(Byte::Code(0));
+                    self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                    self.add_to_code(Byte::Code(digit.value));
+                    self.add_to_code(Byte::Code(ADD_CARRY));
+                    self.add_to_code(Byte::Code(RESERVED_MEM1));
+                    self.add_to_code(Byte::Code(0));
+                }
+                _ => panic!("expected number"),
+            },
+        }
+    }
     // return the memory address which has the result
     fn do_boolean_to_memory(
         &mut self,
-        operation_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
+        bool_op_production_strong: Rc<RefCell<AbstractProduction<'a>>>,
         current_scope_strong: Rc<RefCell<Scope<'a>>>,
     ) -> Byte {
-        let operation_production = operation_production_strong.borrow();
+        let operation_production = bool_op_production_strong.borrow();
         let current_scope = current_scope_strong.borrow();
 
         // should only be two children
@@ -369,7 +538,7 @@ impl<'a> OpCodes<'a> {
                             self.add_to_code(Byte::Code(0));
                             self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
                             // TODO: change this to a pool of values for nested boolean
-                            self.add_to_code(Byte::Code(LITERALS_MEM));
+                            self.add_to_code(Byte::Code(RESERVED_MEM1));
                             self.add_to_code(Byte::Code(0));
                             // store true if I dont branch back over it
                             self.add_to_code(Byte::Code(BRANCH_Z_0));
@@ -379,7 +548,7 @@ impl<'a> OpCodes<'a> {
                             self.add_to_code(Byte::Code(1));
                             self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
                             // TODO: change this to a pool of values for nested boolean
-                            self.add_to_code(Byte::Code(LITERALS_MEM));
+                            self.add_to_code(Byte::Code(RESERVED_MEM1));
                             self.add_to_code(Byte::Code(0));
                             self.resolve_jump_here();
                         }
@@ -390,7 +559,7 @@ impl<'a> OpCodes<'a> {
                             self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
 
                             // TODO: change this to a pool of values for nested boolean
-                            self.add_to_code(Byte::Code(LITERALS_MEM));
+                            self.add_to_code(Byte::Code(RESERVED_MEM1));
                             self.add_to_code(Byte::Code(0));
                             // store false if I dont branch back over it
                             self.add_to_code(Byte::Code(BRANCH_Z_0));
@@ -400,7 +569,7 @@ impl<'a> OpCodes<'a> {
                             self.add_to_code(Byte::Code(0));
                             self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
                             // TODO: change this to a pool of values for nested boolean
-                            self.add_to_code(Byte::Code(LITERALS_MEM));
+                            self.add_to_code(Byte::Code(RESERVED_MEM1));
                             self.add_to_code(Byte::Code(0));
                             self.resolve_jump_here();
                         }
@@ -411,7 +580,7 @@ impl<'a> OpCodes<'a> {
             },
             _ => panic!("expected operation"),
         }
-        return Byte::Code(LITERALS_MEM);
+        return Byte::Code(RESERVED_MEM1);
     }
 
     // returns the memory reference where the value is
@@ -428,9 +597,9 @@ impl<'a> OpCodes<'a> {
                         self.add_to_code(Byte::Code(0));
 
                         self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
-                        self.add_to_code(Byte::Code(LITERALS_MEM));
+                        self.add_to_code(Byte::Code(RESERVED_MEM1));
                         self.add_to_code(Byte::Code(0));
-                        return Byte::Code(LITERALS_MEM);
+                        return Byte::Code(RESERVED_MEM1);
                     }
                     AbstractProductionType::Boolop(_) => {
                         todo!()
@@ -451,17 +620,17 @@ impl<'a> OpCodes<'a> {
                         _ => panic!("expected true/ false"),
                     };
                     self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
-                    self.add_to_code(Byte::Code(LITERALS_MEM));
+                    self.add_to_code(Byte::Code(RESERVED_MEM1));
                     self.add_to_code(Byte::Code(0));
-                    return Byte::Code(LITERALS_MEM);
+                    return Byte::Code(RESERVED_MEM1);
                 }
                 TokenKind::Digit(digit) => {
                     self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
                     self.add_to_code(Byte::Code(digit.value as u8));
                     self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
-                    self.add_to_code(Byte::Code(LITERALS_MEM));
+                    self.add_to_code(Byte::Code(RESERVED_MEM1));
                     self.add_to_code(Byte::Code(0));
-                    return Byte::Code(LITERALS_MEM);
+                    return Byte::Code(RESERVED_MEM1);
                 }
                 _ => panic!("expected literal or reference"),
             },
