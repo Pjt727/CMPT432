@@ -203,8 +203,35 @@ impl<'a> OpCodes<'a> {
             AbstractNodeEnum::Terminal(t) => {
                 match &t.kind {
                     TokenKind::Keyword(k) => match k {
-                        Keyword::True => todo!(),
-                        Keyword::False => todo!(),
+                        Keyword::True => {
+                            self.push_jump_stack(); // anchor this next instruction to go back to
+                            self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                            self.add_to_code(Byte::Code(1));
+                            self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                            self.add_to_code(Byte::Code(RESERVED_MEM1));
+                            self.add_to_code(Byte::Code(0));
+                            self.add_to_code(Byte::Code(LOAD_X_CONST));
+                            self.add_to_code(Byte::Code(1));
+                            self.add_to_code(Byte::Code(COMPARE_MEM_X_TO_Z));
+                            self.add_to_code(Byte::Code(RESERVED_MEM1));
+                            self.add_to_code(Byte::Code(0));
+                            self.add_to_code(Byte::Code(BRANCH_Z_0));
+                            self.add_to_code(Byte::JumpForward);
+                        }
+                        Keyword::False => {
+                            self.push_jump_stack(); // anchor this next instruction to go back to
+                            self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
+                            self.add_to_code(Byte::Code(0));
+                            self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
+                            self.add_to_code(Byte::Code(RESERVED_MEM1));
+                            self.add_to_code(Byte::Code(0));
+                            self.add_to_code(Byte::Code(LOAD_X_CONST));
+                            self.add_to_code(Byte::Code(1));
+                            self.add_to_code(Byte::Code(COMPARE_MEM_X_TO_Z));
+                            self.add_to_code(Byte::Code(RESERVED_MEM1));
+                            self.add_to_code(Byte::Code(0));
+                            self.add_to_code(Byte::Code(BRANCH_Z_0));
+                        }
                         _ => panic!("expected true/false"),
                     },
                     TokenKind::Id(id) => {
@@ -298,7 +325,7 @@ impl<'a> OpCodes<'a> {
                         Keyword::True => {
                             self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
                             self.add_to_code(Byte::Code(1));
-                            self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                            self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
                             self.add_to_code(Byte::Code(RESERVED_MEM1));
                             self.add_to_code(Byte::Code(0));
                             self.add_to_code(Byte::Code(LOAD_X_CONST));
@@ -312,7 +339,7 @@ impl<'a> OpCodes<'a> {
                         Keyword::False => {
                             self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
                             self.add_to_code(Byte::Code(0));
-                            self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                            self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
                             self.add_to_code(Byte::Code(RESERVED_MEM1));
                             self.add_to_code(Byte::Code(0));
                             self.add_to_code(Byte::Code(LOAD_X_CONST));
@@ -321,6 +348,7 @@ impl<'a> OpCodes<'a> {
                             self.add_to_code(Byte::Code(RESERVED_MEM1));
                             self.add_to_code(Byte::Code(0));
                             self.add_to_code(Byte::Code(BRANCH_Z_0));
+                            self.add_to_code(Byte::JumpForward);
                         }
                         _ => panic!("expected true/false"),
                     },

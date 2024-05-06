@@ -2,7 +2,10 @@
 The test cases in the code generation folder go over all cases for simple boolean
 expressions, prints, adding, ifs, while loops, nested scopes. 
 Things that are not implemented (such as nested bool ops maybe) currently stop the entire program
-panicking using the todo!() rust macro. As always to run `cargo run PATH/TO/FILE`.
+panicking using the todo!() rust macro. This means, sadly, that the program will completely stop 
+do the tests will have to be broken up into multiple files to ensure that any nested boolean/ digit expressions
+    do not stop working code from being generated.
+As always to run `cargo run PATH/TO/FILE`.
 Also a lot of the semantic analysis tests are good for the compiler.
 
 # bool ops
