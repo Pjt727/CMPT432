@@ -734,12 +734,10 @@ impl<'a> OpCodes<'a> {
                 let abstract_production = abstract_production_strong.borrow();
                 match &abstract_production.abstract_type {
                     AbstractProductionType::StringExpr(t) => {
-                        self.add_to_code(Byte::Code(LOAD_ACCUM_MEM));
+                        self.add_to_code(Byte::Code(LOAD_ACCUM_CONST));
                         let heap_address = self.add_to_heap(&t.representation);
-                        // mem addresses need be two bytes
+                        dbg!(heap_address);
                         self.add_to_code(Byte::Code(heap_address));
-                        self.add_to_code(Byte::Code(0));
-
                         self.add_to_code(Byte::Code(STORE_ACCUM_MEM));
                         self.add_to_code(Byte::Code(RESERVED_MEM1));
                         self.add_to_code(Byte::Code(0));
@@ -789,6 +787,7 @@ impl<'a> OpCodes<'a> {
                     AbstractProductionType::StringExpr(t) => {
                         self.add_to_code(Byte::Code(LOAD_X_CONST));
                         let heap_address = self.add_to_heap(&t.representation);
+                        dbg!(heap_address);
                         self.add_to_code(Byte::Code(heap_address));
                     }
                     AbstractProductionType::Boolop(_) => {

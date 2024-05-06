@@ -15,11 +15,15 @@
     }
 
     if (a == "hi") {
-        print("a is hi")
+        print("a is hi ")
     }
 
     if (a == "b") {
         print("wrong")
+    }
+
+    if ("hi" == "hi") {
+        print("hi is hi")
     }
 }$
 
