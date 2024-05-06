@@ -2,7 +2,8 @@
 The test cases in the code generation folder go over all cases for simple boolean
 expressions, prints, adding, ifs, while loops, nested scopes. 
 Things that are not implemented (such as nested bool ops maybe) currently stop the entire program
-panicking using the todo!() rust macro. As always to run `cargo run PATH/TO/FILE`
+panicking using the todo!() rust macro. As always to run `cargo run PATH/TO/FILE`.
+Also a lot of the semantic analysis tests are good for the compiler.
 
 # bool ops
 I use a routine which generates a boolean expression to memory so every
@@ -28,3 +29,5 @@ multiple times to ensure that all useless commands are stripped.
 I am sort of tempted to try it out as it will also lend to a way for me to programmatically test my op codes.
 
 
+# edge cases
+what if there is a jump bigger than 127 bytes... would have to insert multiple jumps and move code
