@@ -2,7 +2,7 @@
 The test cases in the code generation folder go over all cases for simple boolean
 expressions, prints, adding, ifs, while loops, nested scopes. 
 Things that are not implemented (such as nested bool ops maybe) currently stop the entire program
-panicking using the todo!() rust macro.
+panicking using the todo!() rust macro. As always to run `cargo run PATH/TO/FILE`
 
 # bool ops
 I use a routine which generates a boolean expression to memory so every

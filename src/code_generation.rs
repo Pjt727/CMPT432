@@ -787,10 +787,9 @@ impl<'a> OpCodes<'a> {
                 let abstract_production = abstract_production_strong.borrow();
                 match &abstract_production.abstract_type {
                     AbstractProductionType::StringExpr(t) => {
-                        self.add_to_code(Byte::Code(LOAD_X_MEMORY));
+                        self.add_to_code(Byte::Code(LOAD_X_CONST));
                         let heap_address = self.add_to_heap(&t.representation);
                         self.add_to_code(Byte::Code(heap_address));
-                        self.add_to_code(Byte::Code(0));
                     }
                     AbstractProductionType::Boolop(_) => {
                         todo!()
