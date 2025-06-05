@@ -1,7 +1,7 @@
 # CMPT 432 - Design of Compilers
-This project implements lexing, parsing, semantic analysis, and code generation for a simple langauge without outside parsing libraries.
+This project implements lexing, parsing, semantic analysis, and code generation for a simple langauge (see `grammar.pdf` for details) without outside parsing libraries.
 There are tests for each component which use the langague files found in the `test_cases` directory; there are md documents containing some of
-    the though process behind all steps besides lexing which are mainly directed to my teacher, but feel free to read them as well.
+    the testing thought process behind all steps besides lexing (lexing has labs). These are mainly directed to my teacher, but feel free to read them.
 
 ## Langauge Choice
 Implementing compiler concepts in rust -- a typed and memory safe language. Rust's compiler is
